@@ -1,0 +1,12 @@
+Django==4.2
+djangorestframework
+pandas
+numpy
+scikit-learn
+matplotlib
+echarts-python  # 或者使用前端JS库，后端仅提供数据
+requests
+akshare         # 你的数据源
+mysqlclient     # 连接MySQL
+fastdtw         # DTW算法库
+scipy
