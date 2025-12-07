@@ -12,7 +12,7 @@
         .el-header { background-color: #fff; box-shadow: 0 1px 4px rgba(0,21,41,.08); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
         .main-card { margin-bottom: 20px; border-radius: 4px; }
         .chart-container { height: 600px; width: 100%; }
-        .drawing-cursor { cursor: crosshair !important; }
+        .drawing-cursor canvas { cursor: crosshair !important; }
         .result-section { margin-top: 20px; border-top: 5px solid #409EFF; }
     </style>
 </head>
@@ -167,63 +167,104 @@
     <script src="{% static 'js/echarts.min.js' %}"></script>
     <script src="{% static 'js/axios.min.js' %}"></script>
 
-    <script>
+<script>
         const { createApp, ref, onMounted } = Vue;
 
         const app = createApp({
             delimiters: ['[[', ']]'],
             setup() {
-                // 1. 定义所有变量 (Refs)
+                // 1. 定义变量
                 const stockCode = ref('000001');
                 const loading = ref(false);
                 const isDrawing = ref(false);
                 const statusText = ref('就绪');
                 const matchResult = ref([]);
                 const tradeMode = ref('BUY');
-
-                // 新增：筛选条件
-                const filters = ref({
-                    sector: '',
-                    minPrice: '',
-                    maxPrice: '',
-                    marketCap: ''
-                });
+                const filters = ref({sector: '', minPrice: '', maxPrice: '', marketCap: ''});
 
                 let myChart = null;
                 let drawingSeriesData = [];
 
-                // 2. 页面跳转辅助
-                const goUrl = (url) => window.location.href = url;
-
-                // 3. 初始化图表
+                // 2. 初始化图表 (核心修复部分)
                 const initChart = () => {
                     const chartDom = document.getElementById('main-chart');
                     myChart = echarts.init(chartDom);
                     const zr = myChart.getZr();
 
+                    // --- 鼠标按下 ---
                     zr.on('mousedown', () => {
                         if (!isDrawing.value) return;
+
+                        // 1. 锁定图表，防止提示框遮挡
+                        myChart.setOption({tooltip: {show: false}});
+
+                        // 2. 清空旧线，准备新画
                         drawingSeriesData = [];
-                        myChart.setOption({ tooltip: { show: false } });
                         statusText.value = '正在绘制...';
                     });
 
+                    // --- 鼠标移动 (画线核心) ---
                     zr.on('mousemove', params => {
-                        if (!isDrawing.value || !params.target) return;
-                        const pt = myChart.convertFromPixel({ seriesIndex: 0 }, [params.offsetX, params.offsetY]);
+                        // 只要模式开启，且鼠标按下了(由mousedown控制)，就允许画
+                        if (!isDrawing.value) return;
+
+                        // 【修复点】删除了 params.event.buttons 判断，避免兼容性问题
+
+                        // 坐标转换：将像素转为逻辑坐标
+                        // seriesIndex: 0 表示基于K线图的坐标系
+                        const pt = myChart.convertFromPixel({seriesIndex: 0}, [params.offsetX, params.offsetY]);
+
                         if (pt) {
                             drawingSeriesData.push(pt);
-                            myChart.setOption({ series: [{}, {}, {}, {}, {}, { data: drawingSeriesData }] });
+
+                            // 【关键点】因为现在有6个系列，我们要更新第6个(手绘线)
+                            // 顺序: [K线, MA5, MA10, MA20, Vol, 手绘线]
+                            // 前面放5个空对象 {} 占位，只更新最后一个
+                            myChart.setOption({
+                                series: [{}, {}, {}, {}, {}, {data: drawingSeriesData}]
+                            });
                         }
                     });
 
+                    // --- 鼠标抬起 ---
                     zr.on('mouseup', () => {
                         if (isDrawing.value) {
-                             myChart.setOption({ tooltip: { show: true } });
-                             statusText.value = '绘制完成';
+                            // 画完恢复 tooltip
+                            myChart.setOption({tooltip: {show: true}});
+                            statusText.value = '绘制完成';
                         }
                     });
+
+                    // 窗口大小改变自适应
                     window.onresize = () => myChart.resize();
+                };
+
+                // 3. 切换绘图模式 (防抖动修复)
+                const toggleDrawing = () => {
+                    isDrawing.value = !isDrawing.value;
+                    statusText.value = isDrawing.value ? '请按住鼠标左键绘图' : '仅浏览';
+
+                    if (isDrawing.value) {
+                        // === 开启绘图：禁用缩放和平移 ===
+                        myChart.setOption({
+                            geo: {roam: false},
+                            dataZoom: [
+                                {type: 'inside', disabled: true}, // 禁用滚轮
+                                {type: 'slider', show: true}      // 保持滑块显示
+                            ]
+                        });
+                        // 清空旧线
+                        drawingSeriesData = [];
+                        myChart.setOption({series: [{}, {}, {}, {}, {}, {data: []}]});
+                    } else {
+                        // === 关闭绘图：恢复缩放和平移 ===
+                        myChart.setOption({
+                            dataZoom: [
+                                {type: 'inside', disabled: false}, // 恢复滚轮
+                                {type: 'slider', show: true}
+                            ]
+                        });
+                    }
                 };
 
                 // 4. 获取数据
@@ -233,58 +274,119 @@
                         const res = await axios.get(`/api/kline/?code=${stockCode.value}`);
                         if (res.data.code === 200) {
                             const d = res.data.data;
-                            // 注意：这里需要配合后端新的返回结构 (mas, volumes)
-                            // 如果后端还没改好，可能会报错。确保后端 views.py 也是最新版
                             renderChart(d.dates, d.values, d.mas, d.volumes);
-                        } else { ElementPlus.ElMessage.error(res.data.msg); }
-                    } catch (e) { ElementPlus.ElMessage.error('请求失败'); }
-                    finally { loading.value = false; }
+                        } else {
+                            ElementPlus.ElMessage.error(res.data.msg);
+                        }
+                    } catch (e) {
+                        ElementPlus.ElMessage.error('请求失败');
+                    } finally {
+                        loading.value = false;
+                    }
                 };
 
-                // 5. 渲染图表 (包含均线和成交量)
+                // 5. 渲染图表
                 const renderChart = (dates, values, mas, volumes) => {
-                    // 容错处理：如果后端没传 mas (还是旧接口)，给个空对象防止报错
-                    mas = mas || { MA5:[], MA10:[], MA20:[] };
+                    mas = mas || {MA5: [], MA10: [], MA20: []};
                     volumes = volumes || [];
 
                     const option = {
                         backgroundColor: '#fff',
                         animation: false,
                         tooltip: {
-                            trigger: 'axis', axisPointer: { type: 'cross' },
+                            trigger: 'axis', axisPointer: {type: 'cross'},
                             backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                            borderWidth: 1, borderColor: '#ccc', textStyle: { color: '#000' }
+                            borderWidth: 1, borderColor: '#ccc', textStyle: {color: '#000'}
                         },
-                        axisPointer: { link: { xAxisIndex: 'all' } },
-                        legend: { data: ['日K', 'MA5', 'MA10', 'MA20', '成交量', '预期形态'], top: 10 },
+                        axisPointer: {link: {xAxisIndex: 'all'}},
+                        legend: {data: ['日K', 'MA5', 'MA10', 'MA20', '成交量', '预期形态'], top: 10},
                         grid: [
-                            { left: '5%', right: '5%', height: '60%', top: '10%' },
-                            { left: '5%', right: '5%', top: '75%', height: '15%' }
+                            {left: '5%', right: '5%', height: '60%', top: '10%'},
+                            {left: '5%', right: '5%', top: '75%', height: '15%'}
                         ],
                         xAxis: [
-                            { type: 'category', data: dates, scale: true, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' },
-                            { type: 'category', gridIndex: 1, data: dates, scale: true, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' }
-                        ],
-                        yAxis: [
-                            { scale: true, splitLine: { show: true, lineStyle: { color: '#eee' } } },
-                            { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-                        ],
-                        dataZoom: [
-                            { type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 },
-                            { type: 'slider', xAxisIndex: [0, 1], bottom: 0, start: 50, end: 100 }
-                        ],
-                        series: [
-                            { name: '日K', type: 'candlestick', data: values, itemStyle: { color: '#F56C6C', color0: '#00C853', borderColor: '#F56C6C', borderColor0: '#00C853' } },
-                            { name: 'MA5', type: 'line', data: mas.MA5, smooth: true, lineStyle: { opacity: 0.8, width: 1, color: '#f6bd16' }, showSymbol: false },
-                            { name: 'MA10', type: 'line', data: mas.MA10, smooth: true, lineStyle: { opacity: 0.8, width: 1, color: '#5b8ff9' }, showSymbol: false },
-                            { name: 'MA20', type: 'line', data: mas.MA20, smooth: true, lineStyle: { opacity: 0.8, width: 1, color: '#9d58f9' }, showSymbol: false },
                             {
-                                name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes,
-                                itemStyle: { color: (params) => params.value[2] === 1 ? '#F56C6C' : '#00C853' }
+                                type: 'category',
+                                data: dates,
+                                scale: true,
+                                boundaryGap: false,
+                                axisLine: {onZero: false},
+                                splitLine: {show: false},
+                                min: 'dataMin',
+                                max: 'dataMax'
                             },
                             {
+                                type: 'category',
+                                gridIndex: 1,
+                                data: dates,
+                                scale: true,
+                                boundaryGap: false,
+                                axisLine: {onZero: false},
+                                axisTick: {show: false},
+                                axisLabel: {show: false},
+                                min: 'dataMin',
+                                max: 'dataMax'
+                            }
+                        ],
+                        yAxis: [
+                            {scale: true, splitLine: {show: true, lineStyle: {color: '#eee'}}},
+                            {
+                                scale: true,
+                                gridIndex: 1,
+                                splitNumber: 2,
+                                axisLabel: {show: false},
+                                axisLine: {show: false},
+                                splitLine: {show: false}
+                            }
+                        ],
+                        dataZoom: [
+                            {type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100},
+                            {type: 'slider', xAxisIndex: [0, 1], bottom: 0, start: 50, end: 100}
+                        ],
+                        series: [
+                            {
+                                name: '日K',
+                                type: 'candlestick',
+                                data: values,
+                                itemStyle: {
+                                    color: '#F56C6C',
+                                    color0: '#00C853',
+                                    borderColor: '#F56C6C',
+                                    borderColor0: '#00C853'
+                                }
+                            },
+                            {
+                                name: 'MA5',
+                                type: 'line',
+                                data: mas.MA5,
+                                smooth: true,
+                                lineStyle: {opacity: 0.8, width: 1, color: '#f6bd16'},
+                                showSymbol: false
+                            },
+                            {
+                                name: 'MA10',
+                                type: 'line',
+                                data: mas.MA10,
+                                smooth: true,
+                                lineStyle: {opacity: 0.8, width: 1, color: '#5b8ff9'},
+                                showSymbol: false
+                            },
+                            {
+                                name: 'MA20',
+                                type: 'line',
+                                data: mas.MA20,
+                                smooth: true,
+                                lineStyle: {opacity: 0.8, width: 1, color: '#9d58f9'},
+                                showSymbol: false
+                            },
+                            {
+                                name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes,
+                                itemStyle: {color: (params) => params.value[2] === 1 ? '#F56C6C' : '#00C853'}
+                            },
+                            {
+                                // 第6个系列：手绘线
                                 name: '预期形态', type: 'line', smooth: 0.3, symbol: 'none',
-                                lineStyle: { color: '#E6A23C', width: 3, type: 'solid' },
+                                lineStyle: {color: '#E6A23C', width: 3, type: 'solid'},
                                 data: [], z: 999
                             }
                         ]
@@ -292,43 +394,43 @@
                     myChart.setOption(option);
                 };
 
-                // 6. 交互逻辑
-                const toggleDrawing = () => {
-                    isDrawing.value = !isDrawing.value;
-                    statusText.value = isDrawing.value ? '请按住鼠标左键绘图' : '仅浏览';
-                    if (isDrawing.value) {
-                        drawingSeriesData = [];
-                        // 重置时要保留6个系列的位置，只清空最后一个
-                        myChart.setOption({ series: [{}, {}, {}, {}, {}, { data: [] }] });
-                    }
-                };
-
+                // 6. 清除画布
                 const clearCanvas = () => {
                     drawingSeriesData = [];
-                    myChart.setOption({ series: [{}, {}, {}, {}, {}, { data: [] }] });
+                    // 同样要占位5个，清空第6个
+                    myChart.setOption({series: [{}, {}, {}, {}, {}, {data: []}]});
                     matchResult.value = [];
                 };
 
                 // 7. 提交匹配
                 const submitPattern = async () => {
                     if (drawingSeriesData.length < 5) {
-                        ElementPlus.ElMessage.warning('请先绘制形态'); return;
+                        ElementPlus.ElMessage.warning('请先绘制形态');
+                        return;
                     }
-                    const loadingInst = ElementPlus.ElLoading.service({ text: '正在多因子筛选与匹配...', background: 'rgba(255,255,255,0.8)' });
+                    const loadingInst = ElementPlus.ElLoading.service({
+                        text: '正在多因子筛选与匹配...',
+                        background: 'rgba(255,255,255,0.8)'
+                    });
 
                     try {
                         const res = await axios.post('/api/match/', {
                             prices: drawingSeriesData.map(i => i[1]),
                             mode: tradeMode.value,
-                            filters: filters.value // 发送筛选条件
+                            filters: filters.value
                         });
                         if (res.data.code === 200) {
                             matchResult.value = res.data.data;
                             ElementPlus.ElMessage.success(`匹配完成，找到 ${matchResult.value.length} 个机会`);
-                            setTimeout(() => document.querySelector('.result-section')?.scrollIntoView({ behavior: 'smooth' }), 300);
-                        } else { ElementPlus.ElMessage.warning(res.data.msg); }
-                    } catch (e) { ElementPlus.ElMessage.error('系统错误'); }
-                    finally { loadingInst.close(); }
+                            setTimeout(() => document.querySelector('.result-section')?.scrollIntoView({behavior: 'smooth'}), 300);
+                        } else {
+                            ElementPlus.ElMessage.warning(res.data.msg);
+                        }
+                    } catch (e) {
+                        ElementPlus.ElMessage.error('系统错误');
+                    } finally {
+                        loadingInst.close();
+                    }
                 };
 
                 const handleTrade = async (row) => {
@@ -338,12 +440,18 @@
                             price: row.price, volume: 100, trigger: row.trigger
                         });
                         ElementPlus.ElMessage.success(`交易成功：${row.code}`);
-                    } catch (e) { ElementPlus.ElMessage.error('交易失败'); }
+                    } catch (e) {
+                        ElementPlus.ElMessage.error('交易失败');
+                    }
                 };
 
-                onMounted(() => { initChart(); fetchData(); });
+                const goUrl = (url) => window.location.href = url;
 
-                // 8. 必须在最后返回所有变量和函数
+                onMounted(() => {
+                    initChart();
+                    fetchData();
+                });
+
                 return {
                     stockCode, loading, isDrawing, statusText, matchResult, tradeMode, filters,
                     fetchData, toggleDrawing, clearCanvas, submitPattern, handleTrade, goUrl
@@ -352,8 +460,10 @@
         });
 
         app.use(ElementPlus);
-        for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component) }
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+            app.component(key, component)
+        }
         app.mount('#app');
-    </script>
+</script>
 </body>
 </html>
