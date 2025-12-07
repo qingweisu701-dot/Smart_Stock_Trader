@@ -1,26 +1,21 @@
-"""
-URL configuration for config project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
-
 from django.contrib import admin
-from django.urls import path, include  # <--- 注意这里加了 include
+from django.urls import path, include
+from django.shortcuts import redirect # 导入重定向函数
+
+def redirect_to_home(request):
+    """
+    根目录重定向函数：
+    当访问 http://127.0.0.1:8000/ 时，
+    自动跳转到 http://127.0.0.1:8000/api/chart/
+    """
+    return redirect('/api/chart/')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # 将 data_engine 的路由挂载到 /api/ 下
+    # 挂载你的应用路由
     path('api/', include('data_engine.urls')),
+
+    # 【新增】根路径自动跳转
+    path('', redirect_to_home),
 ]
