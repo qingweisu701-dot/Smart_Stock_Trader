@@ -16,8 +16,11 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include  # <--- 注意这里加了 include
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path('admin/', admin.site.urls),
+
+    # 将 data_engine 的路由挂载到 /api/ 下
+    path('api/', include('data_engine.urls')),
 ]

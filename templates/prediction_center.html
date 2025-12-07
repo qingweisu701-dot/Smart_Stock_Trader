@@ -1,0 +1,170 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>量化预测中心 | AI Stock</title>
+    <link rel="stylesheet" href="{% static 'css/element-plus.css' %}">
+    <style>
+        body { margin: 0; padding: 0; background-color: #f0f2f5; font-family: sans-serif; }
+        .el-aside { background: #001529; color: white; height: 100vh; }
+        .el-header { background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+        .logo-area { height: 60px; line-height: 60px; text-align: center; font-weight: bold; font-size: 20px; color: white; background: #002140; }
+
+        .predict-card { margin-top: 20px; text-align: center; padding: 30px; }
+        .suggestion-box { font-size: 24px; font-weight: bold; margin: 20px 0; }
+        .chart-box { height: 500px; width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <el-container>
+            <el-aside width="220px">
+                <div class="logo-area">🤖 智能决策系统</div>
+                <el-menu active-text-color="#409EFF" background-color="#001529" text-color="#fff" default-active="3">
+                    <el-menu-item index="1" @click="goUrl('/api/chart/')"><i class="el-icon-s-home"></i><span>系统首页</span></el-menu-item>
+                    <el-sub-menu index="2">
+                        <template #title><span>模式匹配分析</span></template>
+                        <el-menu-item index="2-1" @click="goUrl('/api/chart/')">特定走势筛选</el-menu-item>
+                        <el-menu-item index="2-2" @click="goUrl('/api/history/')">历史回测记录</el-menu-item>
+                    </el-sub-menu>
+                    <el-menu-item index="3" @click="window.location.href='/api/prediction/'"><span>量化预测中心</span></el-menu-item>
+                </el-menu>
+            </el-aside>
+
+            <el-container>
+                <el-header>
+                    <h3>🔮 AI 量化预测中心 (LSTM Model)</h3>
+                    <el-tag>V 1.0.0</el-tag>
+                </el-header>
+
+                <el-main>
+                    <el-card shadow="hover">
+                        <el-row :gutter="20">
+                            <el-col :span="18">
+                                <el-input v-model="stockCode" placeholder="输入股票代码 (如 000001)" size="large">
+                                    <template #prepend>股票代码</template>
+                                </el-input>
+                            </el-col>
+                            <el-col :span="6">
+                                <el-button type="primary" size="large" @click="runPrediction" :loading="loading" style="width: 100%">
+                                    开始预测未来5日
+                                </el-button>
+                            </el-col>
+                        </el-row>
+                    </el-card>
+
+                    <el-card v-if="result" class="predict-card" shadow="always">
+                        <h3>📈 [[ stockCode ]] 预测分析报告</h3>
+
+                        <div class="suggestion-box" :style="{ color: result.suggestion_color === 'red' ? '#F56C6C' : '#67C23A' }">
+                            [[ result.suggestion ]]
+                        </div>
+
+                        <p>预计未来5日累计收益率:
+                            <span :style="{ fontWeight: 'bold', color: result.final_return > 0 ? 'red' : 'green' }">
+                                [[ result.final_return ]]%
+                            </span>
+                        </p>
+
+                        <div id="predict-chart" class="chart-box"></div>
+                    </el-card>
+                </el-main>
+            </el-container>
+        </el-container>
+    </div>
+
+    <script src="{% static 'js/vue.global.js' %}"></script>
+    <script src="{% static 'js/element-plus.js' %}"></script>
+    <script src="{% static 'js/element-plus-icons.js' %}"></script>
+    <script src="{% static 'js/echarts.min.js' %}"></script>
+    <script src="{% static 'js/axios.min.js' %}"></script>
+
+    <script>
+        const { createApp, ref } = Vue;
+        const app = createApp({
+            delimiters: ['[[', ']]'],
+            setup() {
+                const stockCode = ref('000001');
+                const loading = ref(false);
+                const result = ref(null);
+                let myChart = null;
+
+                const goUrl = (url) => window.location.href = url;
+
+                const runPrediction = async () => {
+                    loading.value = true;
+                    result.value = null;
+                    try {
+                        // 模拟加载时间，让用户觉得算法在努力计算
+                        await new Promise(r => setTimeout(r, 800));
+
+                        const res = await axios.post('/api/prediction/run/', { code: stockCode.value });
+
+                        if (res.data.code === 200) {
+                            result.value = res.data.data;
+                            // 等待 DOM 渲染后再画图
+                            setTimeout(() => renderChart(), 100);
+                            ElementPlus.ElMessage.success('预测完成');
+                        } else {
+                            ElementPlus.ElMessage.error(res.data.msg);
+                        }
+                    } catch (e) {
+                        ElementPlus.ElMessage.error('系统错误');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const renderChart = () => {
+                    const dom = document.getElementById('predict-chart');
+                    myChart = echarts.init(dom);
+
+                    const data = result.value;
+                    // 拼接历史和未来数据，中间稍微断开或连接
+                    // 简单起见，我们把历史的最后一个点作为未来的起点
+                    const fullDates = [...data.history_dates, ...data.future_dates];
+
+                    // 历史数据填充 (未来部分补 null)
+                    const historySeries = [...data.history_prices, ...new Array(data.future_prices.length).fill(null)];
+
+                    // 未来数据填充 (历史部分补 null，注意衔接)
+                    // 为了让线连起来，把历史最后一个点加进去
+                    const lastHistoryPrice = data.history_prices[data.history_prices.length - 1];
+                    const futureSeries = new Array(data.history_prices.length - 1).fill(null);
+                    futureSeries.push(lastHistoryPrice);
+                    futureSeries.push(...data.future_prices);
+
+                    const option = {
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: ['历史走势', 'AI预测走势'] },
+                        xAxis: { type: 'category', data: fullDates },
+                        yAxis: { scale: true },
+                        series: [
+                            {
+                                name: '历史走势',
+                                type: 'line',
+                                data: historySeries,
+                                itemStyle: { color: '#333' },
+                                showSymbol: false
+                            },
+                            {
+                                name: 'AI预测走势',
+                                type: 'line',
+                                data: futureSeries,
+                                lineStyle: { type: 'dashed', width: 3, color: '#409EFF' }, // 虚线
+                                itemStyle: { color: '#409EFF' }
+                            }
+                        ]
+                    };
+                    myChart.setOption(option);
+                };
+
+                return { stockCode, loading, result, runPrediction, goUrl };
+            }
+        });
+        app.use(ElementPlus);
+        app.mount('#app');
+    </script>
+</body>
+</html>
