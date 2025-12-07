@@ -14,11 +14,20 @@ def run_lstm_prediction(code, days=5):
     if not qs.exists():
         return None
 
-    data_list = list(qs.values('trade_date', 'close'))
+    # =========================================================
+    # 🔥【修正 1】读取 close_price 而不是 close
+    # =========================================================
+    data_list = list(qs.values('trade_date', 'close_price'))
     df = pd.DataFrame(data_list)
 
     if len(df) < 30:
         return None
+
+    # =========================================================
+    # 🔥【修正 2】重命名回 close，保证后续逻辑不报错
+    # =========================================================
+    if not df.empty:
+        df.rename(columns={'close_price': 'close'}, inplace=True)
 
     last_date = df.iloc[-1]['trade_date']
     last_price = df.iloc[-1]['close']

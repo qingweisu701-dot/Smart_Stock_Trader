@@ -16,6 +16,10 @@ def normalize_series(series):
 
 def calculate_technical_indicators(df):
     """计算指标: MACD, MA, RSI"""
+    # 确保 df 中有 close 列 (下面的修复会保证这点)
+    if 'close' not in df.columns:
+        return df
+
     # MA
     df['MA5'] = df['close'].rolling(window=5).mean()
     df['MA20'] = df['close'].rolling(window=20).mean()
@@ -37,16 +41,17 @@ def calculate_technical_indicators(df):
 
 
 # ==========================================
-# 2. 策略动态检查器 (核心新增)
+# 2. 策略动态检查器
 # ==========================================
 def check_strategies(df, strategy_list, logic_type='AND'):
     """
     动态检查策略组合
-    :param strategy_list: ['MACD_GOLD', 'RSI_LOW', ...]
-    :param logic_type: 'AND' (全满足) / 'OR' (满足任一)
     """
     if not strategy_list:
         return True, "无策略限制"
+
+    if len(df) < 2:
+        return False, "数据不足"
 
     curr = df.iloc[-1]
     prev = df.iloc[-2]
@@ -95,9 +100,9 @@ def check_strategies(df, strategy_list, logic_type='AND'):
     if not results: return True, "无有效策略"
 
     if logic_type == 'AND':
-        final_pass = all(results)  # 必须全部为 True
+        final_pass = all(results)
     else:  # OR
-        final_pass = any(results)  # 只要有一个 True
+        final_pass = any(results)
 
     return final_pass, ",".join(labels) if labels else "不满足策略"
 
@@ -107,14 +112,6 @@ def check_strategies(df, strategy_list, logic_type='AND'):
 # ==========================================
 
 def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
-    """
-    filters 结构扩展:
-    {
-        'sector': ...,
-        'strategies': ['MACD_GOLD', ...],  <-- 新增
-        'logic': 'AND'/'OR'                <-- 新增
-    }
-    """
     if not user_pattern_prices or len(user_pattern_prices) < 5:
         return []
 
@@ -146,9 +143,32 @@ def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
 
         # 获取数据
         qs = StockDaily.objects.filter(ts_code=code).order_by('trade_date')
-        df = pd.DataFrame(list(qs.values('trade_date', 'open', 'close', 'high', 'low')))
+
+        # =========================================================
+        # 🔥【关键修复】这里必须使用新的字段名 (_price)
+        # =========================================================
+        data = list(qs.values(
+            'trade_date',
+            'open_price',
+            'close_price',
+            'high_price',
+            'low_price'
+        ))
+
+        df = pd.DataFrame(data)
 
         if len(df) < pattern_len + 5: continue
+
+        # =========================================================
+        # 🔥【关键修复】重命名回 open/close 以兼容后续逻辑
+        # =========================================================
+        if not df.empty:
+            df.rename(columns={
+                'open_price': 'open',
+                'close_price': 'close',
+                'high_price': 'high',
+                'low_price': 'low'
+            }, inplace=True)
 
         # --- 1. 计算技术指标 ---
         df = calculate_technical_indicators(df)
@@ -160,11 +180,9 @@ def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
             max_p = float(filters.get('maxPrice') or 99999)
             if not (min_p <= curr['close'] <= max_p): continue
 
-        # --- 3. 【核心升级】动态策略组合检查 ---
+        # --- 3. 动态策略组合检查 ---
         is_triggered, trigger_msg = check_strategies(df, strategy_list, logic_type)
 
-        # 如果勾选了策略，但没满足，是否过滤？
-        # 为了演示效果，我们不直接 continue，而是大幅扣分
         strategy_score = 30 if is_triggered else 0
 
         # --- 4. 形态相似度 (DTW) ---
@@ -173,15 +191,12 @@ def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
         distance, _ = fastdtw(norm_user_pattern, norm_stock_pattern, dist=lambda x, y: abs(x - y))
         dtw_score = 100 / (1 + distance)
 
-        # 综合分 = 形态分 + 策略分
-        # 如果 is_triggered 为 False，策略分就是 0，总分变低，排名靠后
         final_score = dtw_score + strategy_score
 
-        # 构造返回结果
         results.append({
             'code': code,
             'score': round(final_score, 2),
-            'trigger': trigger_msg if is_triggered else "形态匹配",  # 显示触发的策略名
+            'trigger': trigger_msg if is_triggered else "形态匹配",
             'price': round(curr['close'], 2),
             'date': curr['trade_date'].strftime('%Y-%m-%d'),
             'match_data': pre_signal_prices.tolist()
