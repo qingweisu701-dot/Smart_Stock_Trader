@@ -11,10 +11,11 @@
     <script src="{% static 'js/echarts.min.js' %}"></script>
     <script src="{% static 'js/axios.min.js' %}"></script>
     <style>
-        body { margin: 0; background: #f0f2f5; font-family: 'PingFang SC', sans-serif; }
-        .el-aside { background: #001529; color: white; height: 100vh; overflow-y: hidden; }
-        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; }
+        body { margin: 0; background: #f0f2f5; font-family: 'PingFang SC', 'Helvetica Neue', sans-serif; }
+        .el-aside { background: #001529; color: white; height: 100vh; overflow-y: hidden; transition: width 0.3s; }
+        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; border-bottom: 1px solid #000; }
         .header { background: #fff; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+        .el-menu { border-right: none; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -23,29 +24,34 @@
         <el-container>
             <el-aside width="220px">
                 <div class="logo">📈 Smart Trader</div>
-                <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF" :default-active="activeMenu" :default-openeds="['1', '2', '3']">
+
+                <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF"
+                         :default-active="activeMenu" :default-openeds="['1', '2']">
 
                     <el-sub-menu index="1">
-                        <template #title><el-icon><Edit /></el-icon><span>图形实验室</span></template>
-                        <el-menu-item index="1-1" @click="go('/api/pattern/draw/')">🖌️ 趋势手绘</el-menu-item>
-                        <el-menu-item index="1-2" @click="go('/api/pattern/build/')">🧱 K线精调</el-menu-item>
+                        <template #title>
+                            <el-icon><Edit /></el-icon><span>图形管理实验室</span>
+                        </template>
+                        <el-menu-item index="1-1" @click="go('/api/pattern/draw/')">🖌️ 开始绘制/构造</el-menu-item>
+                        <el-menu-item index="1-2" @click="go('/api/pattern/list_page/')">📚 我的模板清单</el-menu-item>
                     </el-sub-menu>
 
                     <el-sub-menu index="2">
-                        <template #title><el-icon><Data-Analysis /></el-icon><span>市场扫描</span></template>
-                        <el-menu-item index="2-1" @click="go('/api/analysis/scan/')">🔍 智能筛选</el-menu-item>
+                        <template #title>
+                            <el-icon><Search /></el-icon><span>市场分析与扫描</span>
+                        </template>
+                        <el-menu-item index="2-1" @click="go('/api/analysis/scan/')">🔍 智能筛选器</el-menu-item>
                         <el-menu-item index="2-2" @click="go('/api/analysis/fav/')">⭐ 我的观察仓</el-menu-item>
                     </el-sub-menu>
 
                     <el-sub-menu index="3">
-                        <template #title><el-icon><Cpu /></el-icon><span>量化决策</span></template>
-                        <el-menu-item index="3-1" @click="go('/api/prediction/ai/')">🔮 AI 预测</el-menu-item>
-                        <el-menu-item index="3-2" @click="go('/api/prediction/backtest/')">📊 历史回测</el-menu-item>
+                        <template #title>
+                            <el-icon><Cpu /></el-icon><span>量化决策中心</span>
+                        </template>
+                        <el-menu-item index="3-1" @click="go('/api/prediction/')">🔮 AI预测与回测</el-menu-item>
+                        <el-menu-item index="3-2" @click="go('/api/trade/history/')">🧾 模拟交易流水</el-menu-item>
                     </el-sub-menu>
 
-                    <el-menu-item index="4" @click="go('/api/trade/history/')">
-                        <el-icon><List /></el-icon><span>交易流水</span>
-                    </el-menu-item>
                 </el-menu>
             </el-aside>
             <el-container>
@@ -66,39 +72,41 @@
     {% block scripts %}{% endblock %}
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, onMounted, computed, watch } = Vue;
+        // 占位函数，防止子页面未定义时报错
         if (typeof pageSetup === 'undefined') { window.pageSetup = () => ({}); }
 
         const app = createApp({
             delimiters: ['[[', ']]'],
             setup() {
+                // 自动高亮当前菜单
                 const path = window.location.pathname;
-                let defaultMenu = '1-1';
-                if(path.includes('pattern/draw')) defaultMenu = '1-1';
-                else if(path.includes('pattern/build')) defaultMenu = '1-2';
-                else if(path.includes('analysis/scan')) defaultMenu = '2-1';
-                else if(path.includes('analysis/fav')) defaultMenu = '2-2';
-                else if(path.includes('prediction/ai')) defaultMenu = '3-1';
-                else if(path.includes('prediction/backtest')) defaultMenu = '3-2';
-                else if(path.includes('trade')) defaultMenu = '4';
+                let m = '1-1';
+                if(path.includes('pattern/draw')) m='1-1';
+                else if(path.includes('pattern/list_page')) m='1-2';
+                else if(path.includes('analysis/scan')) m='2-1';
+                else if(path.includes('analysis/fav')) m='2-2';
+                else if(path.includes('prediction')) m='3-1';
+                else if(path.includes('trade')) m='3-2';
 
-                const activeMenu = ref(defaultMenu);
+                const activeMenu = ref(m);
                 const msgCount = ref(0);
                 const go = (url) => window.location.href = url;
 
+                // 消息轮询
                 setInterval(async () => {
                     try {
                         const res = await axios.get('/api/message/check/');
                         if (res.data.data && res.data.data.length > 0) {
                             msgCount.value = res.data.data.length;
-                            ElementPlus.ElNotification({ title: '新策略信号', message: res.data.data[0].content, type: 'success' });
+                            ElementPlus.ElNotification({ title: '新信号', message: res.data.data[0].content, type: 'success' });
                         }
                     } catch(e){}
                 }, 10000);
 
                 const showMsg = () => ElementPlus.ElMessage.info('请前往分析页面查看详情');
-                const pageLogic = window.pageSetup();
-                return { activeMenu, go, msgCount, showMsg, ...pageLogic };
+
+                return { activeMenu, go, msgCount, showMsg, ...window.pageSetup() };
             }
         });
         app.use(ElementPlus);

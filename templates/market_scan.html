@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}市场智能扫描{% endblock %}
+{% block content %}
+<el-container style="height:85vh; border:1px solid #eee">
+    <el-aside width="320px" style="padding:15px; background:#fff; overflow-y:auto">
+        <h3>🔍 智能筛选</h3>
+        <el-form label-position="top">
+            <el-form-item label="1. 形态匹配">
+                <el-select v-model="filters.patternId" placeholder="选择形态" clearable style="width:100%">
+                    <el-option-group label="📈 预设看涨"><el-option v-for="p in presets.buy" :key="p.id" :label="p.name" :value="'PRESET:'+p.id"/></el-option-group>
+                    <el-option-group label="📉 预设看跌"><el-option v-for="p in presets.sell" :key="p.id" :label="p.name" :value="'PRESET:'+p.id"/></el-option-group>
+                    <el-option-group label="👤 我的"><el-option v-for="p in presets.user" :key="p.id" :label="p.name" :value="'USER:'+p.id"/></el-option-group>
+                </el-select>
+            </el-form-item>
+            <el-form-item label="2. 指标筛选">
+                <el-checkbox-group v-model="filters.strategies">
+                    <el-checkbox label="MA_GOLD">均线金叉</el-checkbox>
+                    <el-checkbox label="MACD_GOLD">MACD金叉</el-checkbox>
+                </el-checkbox-group>
+            </el-form-item>
+            <el-form-item label="3. 价格区间(OHLC)">
+                <el-row :gutter="5"><el-col :span="12"><el-input v-model="filters.minClose" placeholder="收盘Min"/></el-col><el-col :span="12"><el-input v-model="filters.maxClose" placeholder="Max"/></el-input></el-col></el-row>
+            </el-form-item>
+            <el-form-item label="4. 市值规模">
+                <el-select v-model="filters.marketCap" style="width:100%">
+                    <el-option label="全部" value=""></el-option>
+                    <el-option label="大盘 (>200亿)" value="LARGE"></el-option>
+                    <el-option label="中盘 (50-200亿)" value="MID"></el-option>
+                    <el-option label="小盘 (<50亿)" value="SMALL"></el-option>
+                </el-select>
+            </el-form-item>
+            <el-button type="primary" style="width:100%" @click="runScan" :loading="loading">扫描市场</el-button>
+        </el-form>
+    </el-aside>
+
+    <el-main>
+        <div v-if="results.length > 0">
+            <el-alert :title="`扫描到 ${results.length} 支股票`" type="success" :closable="false" style="margin-bottom:10px"/>
+            <el-table :data="results" stripe border height="100%">
+                <el-table-column prop="code" label="代码" width="100"></el-table-column>
+                <el-table-column prop="name" label="名称" width="120"></el-table-column>
+                <el-table-column label="信号建议">
+                    <template #default="s">
+                        <el-tag :type="s.row.match_type==='BUY'?'danger':'success'" effect="dark">
+                            [[ s.row.match_type==='BUY'?'买入':'卖出' ]]
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="AI置信度" width="200">
+                    <template #default="s">
+                        <el-progress :percentage="s.row.confidence" :color="s.row.confidence>80?'#F56C6C':'#E6A23C'"/>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="price" label="现价"></el-table-column>
+                <el-table-column label="操作">
+                    <template #default="s">
+                        <el-button size="small" @click="addFav(s.row)">收藏</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <el-empty v-else description="请设置条件并扫描"></el-empty>
+    </el-main>
+</el-container>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function pageSetup() {
+    const loading = ref(false);
+    const filters = ref({ patternId:'', strategies:[], minClose:'', maxClose:'', marketCap:'', sector:'' });
+    const presets = ref({ buy:[], sell:[], user:[] });
+    const results = ref([]);
+
+    const init = async () => {
+        const res = await axios.get('/api/pattern/list/');
+        const all = res.data.data.presets;
+        presets.value.buy = all.filter(p=>p.type==='BUY');
+        presets.value.sell = all.filter(p=>p.type==='SELL');
+        presets.value.user = res.data.data.users;
+    };
+
+    const runScan = async () => {
+        loading.value = true;
+        try {
+            let pData = null;
+            if (filters.value.patternId) {
+                const [source, id] = filters.value.patternId.split(':');
+                if (source === 'PRESET') {
+                    pData = [...presets.value.buy, ...presets.value.sell].find(x => x.id === id).data;
+                } else {
+                    pData = presets.value.user.find(x => x.id == id).data;
+                }
+            }
+            const res = await axios.post('/api/analysis/run/', { pattern_data: pData, filters: filters.value });
+            results.value = res.data.data;
+            if(results.value.length === 0) ElementPlus.ElMessage.info('无结果');
+        } finally { loading.value = false; }
+    };
+
+    const addFav = async (row) => {
+        await axios.post('/api/favorite/add/', {code:row.code});
+        ElementPlus.ElMessage.success('已收藏');
+    };
+
+    onMounted(init);
+    return { loading, filters, presets, results, runScan, addFav };
+}
+</script>
+{% endblock %}
