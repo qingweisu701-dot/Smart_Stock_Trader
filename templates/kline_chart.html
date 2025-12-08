@@ -388,7 +388,40 @@
                 };
 
                 const clearCanvas = () => { drawingSeriesData = []; updateDrawingLine([]); matchResult.value = []; };
-                const handleTrade = async (row) => { /* 略 */ };
+                const handleTrade = (row) => {
+                    ElementPlus.ElMessageBox.confirm(
+                        `确定要以 ¥${row.price} 的价格买入 ${row.code} (100股) 吗？\n触发策略：${row.trigger}`,
+                        '模拟交易确认',
+                        {
+                            confirmButtonText: '确认买入',
+                            cancelButtonText: '取消',
+                            type: 'warning',
+                        }
+                    ).then(async () => {
+                        try {
+                            // 调用后端下单接口
+                            const res = await axios.post('/api/order/', {
+                                code: row.code,
+                                date: row.date,
+                                type: 'BUY',       // 默认为买入
+                                price: row.price,
+                                volume: 100,       // 默认买入 1 手
+                                trigger: row.trigger
+                            });
+
+                            if (res.data.code === 200) {
+                                ElementPlus.ElMessage.success('交易成功！已存入历史记录');
+                            } else {
+                                ElementPlus.ElMessage.error('交易失败: ' + res.data.msg);
+                            }
+                        } catch (e) {
+                            ElementPlus.ElMessage.error('网络请求错误');
+                            console.error(e);
+                        }
+                    }).catch(() => {
+                        ElementPlus.ElMessage.info('已取消交易');
+                    });
+                };
                 const goUrl = (url) => window.location.href = url;
 
                 onMounted(() => { initChart(); fetchData(); });

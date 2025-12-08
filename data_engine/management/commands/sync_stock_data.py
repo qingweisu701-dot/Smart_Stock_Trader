@@ -38,32 +38,34 @@ class Command(BaseCommand):
                 change_pct = random.uniform(-0.03, 0.03)
 
                 # 计算当天的 OHLC (开高低收)
-                open_price = price * (1 + random.uniform(-0.01, 0.01))
-                close_price = price * (1 + change_pct)
-                high_price = max(open_price, close_price) * (1 + random.uniform(0, 0.01))
-                low_price = min(open_price, close_price) * (1 - random.uniform(0, 0.01))
+                curr_open = price * (1 + random.uniform(-0.01, 0.01))
+                curr_close = price * (1 + change_pct)
+                curr_high = max(curr_open, curr_close) * (1 + random.uniform(0, 0.01))
+                curr_low = min(curr_open, curr_close) * (1 - random.uniform(0, 0.01))
 
                 # 模拟成交量
                 vol = random.randint(10000, 100000)
-                amount = vol * close_price
+                amount = vol * curr_close
 
                 # 更新第二天的基准价
-                price = close_price
+                price = curr_close
 
                 # 存入列表
+                # =========================================================
+                # 🔥【修复】使用新的字段名 open_price, close_price ...
+                # =========================================================
                 data_list.append(StockDaily(
                     ts_code=code,
                     trade_date=single_date.date(),
-                    open=round(open_price, 2),
-                    high=round(high_price, 2),
-                    low=round(low_price, 2),
-                    close=round(close_price, 2),
+                    open_price=round(curr_open, 2),   # 修正
+                    high_price=round(curr_high, 2),   # 修正
+                    low_price=round(curr_low, 2),     # 修正
+                    close_price=round(curr_close, 2), # 修正
                     vol=vol,
                     amount=amount
                 ))
 
-            # 批量插入数据库 (比一条条插快很多)
-            # update_or_create 比较慢，这里为了速度先删除旧数据再批量插入
+            # 批量插入数据库
             StockDaily.objects.filter(ts_code=code).delete()
             StockDaily.objects.bulk_create(data_list)
 
