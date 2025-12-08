@@ -13,19 +13,11 @@ def run_lstm_prediction(code, days=5):
     qs = StockDaily.objects.filter(ts_code=code).order_by('trade_date')
     if not qs.exists():
         return None
-
-    # =========================================================
-    # 🔥【修正 1】读取 close_price 而不是 close
-    # =========================================================
     data_list = list(qs.values('trade_date', 'close_price'))
     df = pd.DataFrame(data_list)
 
     if len(df) < 30:
         return None
-
-    # =========================================================
-    # 🔥【修正 2】重命名回 close，保证后续逻辑不报错
-    # =========================================================
     if not df.empty:
         df.rename(columns={'close_price': 'close'}, inplace=True)
 
@@ -61,7 +53,7 @@ def run_lstm_prediction(code, days=5):
 
         future_prices.append(round(current_price, 2))
 
-    # 4. 生成操作建议
+    # 4. 生成操作建议 (汉化部分)
     # 如果预测第5天比今天涨 2% 以上 -> 建议买入
     final_return = (future_prices[-1] - last_price) / last_price
     if final_return > 0.02:

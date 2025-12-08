@@ -229,15 +229,14 @@
                 const statusText = ref('就绪');
                 const matchResult = ref([]);
                 const tradeMode = ref('BUY');
-                // 新增了 codeQuery 字段
+                const hasSearched = ref(false);
                 const filters = ref({
-                    codeQuery: '', // <--- 新增
+                    codeQuery: '',
                     sector: '',
                     minPrice: '',
                     maxPrice: '',
                     marketCap: ''
                 });
-
                 // 弹窗变量
                 const tableDialogVisible = ref(false);
                 const inputTableData = ref([
@@ -522,6 +521,7 @@
 
                 return {
                     stockCode, loading, isDrawing, statusText, matchResult, tradeMode, filters,
+                    hasSearched,
                     tableDialogVisible, inputTableData, strategyDialogVisible, selectedStrategies, strategyLogic,
                     fetchData, toggleDrawing, clearCanvas, submitPattern, handleTrade, goUrl,
                     openTableDialog, addTableRow, deleteRow, generateFromTable, getStrategyLabel
