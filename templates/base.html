@@ -15,10 +15,11 @@
         .el-aside { background: #001529; color: white; height: 100vh; }
         .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; }
         .header { background: #fff; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+        [v-cloak] { display: none; }
     </style>
 </head>
 <body>
-    <div id="app">
+    <div id="app" v-cloak>
         <el-container>
             <el-aside width="200px">
                 <div class="logo">📈 Smart Trader</div>
@@ -31,18 +32,29 @@
             </el-aside>
             <el-container>
                 <el-header class="header">
-                    <h3>{% block title %}{% endblock %}</h3>
+                    <h3>{% block title %}首页{% endblock %}</h3>
                     <div @click="showMsg" style="cursor: pointer; position: relative;">
                         <el-icon size="20"><Bell /></el-icon>
                         <el-badge v-if="msgCount > 0" :value="msgCount" style="position: absolute; top: -5px; right: -5px;" />
                     </div>
                 </el-header>
-                <el-main>{% block content %}{% endblock %}</el-main>
+                <el-main>
+                    {% block content %}{% endblock %}
+                </el-main>
             </el-container>
         </el-container>
     </div>
+
+    {% block scripts %}{% endblock %}
+
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, onMounted, computed, watch } = Vue;
+
+        // 定义一个全局的空 Setup，防止子页面没定义时报错
+        if (typeof pageSetup === 'undefined') {
+            window.pageSetup = () => ({});
+        }
+
         const app = createApp({
             delimiters: ['[[', ']]'],
             setup() {
@@ -50,24 +62,30 @@
                 const msgCount = ref(0);
                 const go = (url) => window.location.href = url;
 
-                // 模拟轮询消息推送
+                // 轮询消息
                 setInterval(async () => {
                     try {
                         const res = await axios.get('/api/message/check/');
-                        if (res.data.data.length > 0) {
+                        if (res.data.data && res.data.data.length > 0) {
                             msgCount.value = res.data.data.length;
                             ElementPlus.ElNotification({
                                 title: '新策略信号',
                                 message: res.data.data[0].content,
-                                type: 'success',
-                                duration: 5000
+                                type: 'success'
                             });
                         }
                     } catch(e){}
-                }, 10000); // 10秒查一次
+                }, 10000);
 
                 const showMsg = () => ElementPlus.ElMessage.info('请前往分析页面查看详情');
-                return { activeMenu, go, msgCount, showMsg, ...(typeof pageSetup === 'function' ? pageSetup() : {}) };
+
+                // 合并子页面的逻辑
+                const pageLogic = window.pageSetup();
+
+                return {
+                    activeMenu, go, msgCount, showMsg,
+                    ...pageLogic
+                };
             }
         });
         app.use(ElementPlus);

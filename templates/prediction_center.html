@@ -14,7 +14,6 @@
                 <h2 :style="{color: predictResult.suggestion_color}">[[ predictResult.suggestion ]]</h2>
                 <p>未来5日预期收益: <b :style="{color: predictResult.final_return>0?'red':'green'}">[[ predictResult.final_return ]]%</b></p>
             </div>
-
             <div id="predict-chart" style="height:350px; width:100%"></div>
         </el-card>
     </el-col>
@@ -47,24 +46,22 @@
         </el-card>
     </el-col>
 </el-row>
+{% endblock %}
 
+{% block scripts %}
 <script>
 function pageSetup() {
     const activeMenu = ref('3');
-
-    // AI 预测相关
     const predictCode = ref('000001');
     const loadingP = ref(false);
     const predictResult = ref(null);
     let chartP = null;
 
-    // 回测相关
     const backtestCode = ref('600519');
     const loadingB = ref(false);
     const backtestResult = ref(null);
     let chartB = null;
 
-    // 运行 AI 预测
     const runPredict = async () => {
         loadingP.value = true;
         try {
@@ -76,7 +73,6 @@ function pageSetup() {
         } finally { loadingP.value = false; }
     };
 
-    // 运行回测
     const runBacktest = async () => {
         loadingB.value = true;
         try {
@@ -88,19 +84,13 @@ function pageSetup() {
         } finally { loadingB.value = false; }
     };
 
-    // 绘图: AI 预测
     const drawPredictChart = (data) => {
         if (chartP) chartP.dispose();
         chartP = echarts.init(document.getElementById('predict-chart'));
-
-        const historyData = data.history_prices;
-        const futureData = data.future_prices;
         const xData = [...data.history_dates, ...data.future_dates];
-
-        // 拼接数据让线条连贯
-        const seriesFuture = new Array(historyData.length - 1).fill(null);
-        seriesFuture.push(historyData[historyData.length - 1]); // 连接点
-        seriesFuture.push(...futureData);
+        const seriesFuture = new Array(data.history_prices.length - 1).fill(null);
+        seriesFuture.push(data.history_prices[data.history_prices.length - 1]);
+        seriesFuture.push(...data.future_prices);
 
         chartP.setOption({
             tooltip: { trigger: 'axis' },
@@ -108,26 +98,20 @@ function pageSetup() {
             xAxis: { type: 'category', data: xData },
             yAxis: { scale: true },
             series: [
-                { name: '历史', type: 'line', data: historyData, itemStyle: {color: '#333'} },
+                { name: '历史', type: 'line', data: data.history_prices, itemStyle: {color: '#333'} },
                 { name: '预测', type: 'line', data: seriesFuture, itemStyle: {color: '#409EFF'}, lineStyle: {type: 'dashed'} }
             ]
         });
     };
 
-    // 绘图: 资金曲线
     const drawBacktestChart = (chartData) => {
         if (chartB) chartB.dispose();
         chartB = echarts.init(document.getElementById('backtest-chart'));
-
-        const dates = chartData.map(i => i.date);
-        const values = chartData.map(i => i.value);
-
         chartB.setOption({
             tooltip: { trigger: 'axis' },
-            title: { text: '账户资金曲线', left: 'center', textStyle: {fontSize: 14} },
-            xAxis: { type: 'category', data: dates },
+            xAxis: { type: 'category', data: chartData.map(i => i.date) },
             yAxis: { scale: true },
-            series: [{ name: '总资产', type: 'line', data: values, smooth: true, areaStyle: { opacity: 0.1 }, itemStyle: {color: '#F56C6C'} }]
+            series: [{ name: '总资产', type: 'line', data: chartData.map(i => i.value), smooth: true, areaStyle: { opacity: 0.1 }, itemStyle: {color: '#F56C6C'} }]
         });
     };
 

@@ -3,16 +3,42 @@ import pandas as pd
 from fastdtw import fastdtw
 from data_engine.models import StockDaily, StockBasic
 
+# ==========================================
+# 1. 形态定义 (20种经典形态)
+# ==========================================
+PRESET_PATTERNS = {
+    # --- 📈 10种上涨形态 (买入信号) ---
+    'five_waves_up': {'data': [0, 6, 2, 8, 4, 10], 'desc': '五浪上涨(趋势加强)', 'type': 'BUY'},
+    'w_bottom': {'data': [10, 0, 5, 0, 10], 'desc': 'W底(双重底)', 'type': 'BUY'},
+    'v_reversal': {'data': [10, 0, 10], 'desc': 'V型反转(暴力拉升)', 'type': 'BUY'},
+    'n_break': {'data': [0, 8, 5, 10], 'desc': 'N字突破(空中加油)', 'type': 'BUY'},
+    'rising_three': {'data': [0, 8, 7, 6, 7, 10], 'desc': '上升三法(中继)', 'type': 'BUY'},
+    'morning_star': {'data': [10, 0, 1, 8], 'desc': '早晨之星(见底)', 'type': 'BUY'},
+    'red_soldiers': {'data': [0, 3, 6, 10], 'desc': '红三兵(步步高)', 'type': 'BUY'},
+    'immortal_guide': {'data': [0, 5, 2, 8], 'desc': '仙人指路(试盘)', 'type': 'BUY'},
+    'step_up': {'data': [0, 3, 2, 5, 4, 7, 6, 10], 'desc': '递进式上涨(稳健)', 'type': 'BUY'},
+    'multi_cannon': {'data': [0, 8, 4, 10], 'desc': '多方炮(两阳夹一阴)', 'type': 'BUY'},
+
+    # --- 📉 10种下跌形态 (卖出信号) ---
+    'm_top': {'data': [0, 10, 5, 10, 0], 'desc': 'M头(双重顶)', 'type': 'SELL'},
+    'head_shoulders': {'data': [0, 7, 4, 10, 4, 7, 0], 'desc': '头肩顶', 'type': 'SELL'},
+    'dark_cloud': {'data': [0, 8, 10, 5], 'desc': '乌云盖顶', 'type': 'SELL'},
+    'shooting_star': {'data': [5, 10, 6, 0], 'desc': '长剑指天(射击之星)', 'type': 'SELL'},
+    'evening_star': {'data': [0, 10, 9, 2], 'desc': '黄昏之星', 'type': 'SELL'},
+    'three_crows': {'data': [10, 7, 4, 0], 'desc': '三只乌鸦', 'type': 'SELL'},
+    'guillotine': {'data': [8, 9, 1], 'desc': '断头铡刀(一阴穿多线)', 'type': 'SELL'},
+    'hanging_man': {'data': [5, 2, 5, 1], 'desc': '吊颈线(诱多)', 'type': 'SELL'},
+    'high_jump_gap': {'data': [10, 9, 5, 0], 'desc': '高位跳空缺口', 'type': 'SELL'},
+    'long_black': {'data': [8, 0], 'desc': '长阴落地(断崖)', 'type': 'SELL'},
+}
+
 
 # ==========================================
-# 1. 基础工具函数
+# 2. 基础工具函数
 # ==========================================
 
 def normalize_series(series):
-    """
-    归一化序列 (Z-Score标准化)
-    用于将不同价格区间的股票（如茅台和农行）放在同一尺度下比较形态
-    """
+    """归一化序列"""
     series = np.array(series)
     if np.std(series) == 0:
         return series
@@ -20,27 +46,23 @@ def normalize_series(series):
 
 
 def calculate_indicators(df):
-    """
-    计算技术指标: MA, MACD, RSI
-    """
-    # 确保有 close 列
+    """计算技术指标: MA, MACD, RSI"""
     if 'close' not in df.columns:
         return df
 
-    # 1. 均线 (MA)
+    # MA
     df['MA5'] = df['close'].rolling(window=5).mean()
     df['MA10'] = df['close'].rolling(window=10).mean()
     df['MA20'] = df['close'].rolling(window=20).mean()
 
-    # 2. MACD (12, 26, 9)
+    # MACD
     exp12 = df['close'].ewm(span=12, adjust=False).mean()
     exp26 = df['close'].ewm(span=26, adjust=False).mean()
     df['DIF'] = exp12 - exp26
     df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
-    # MACD 柱状图
     df['MACD_Bar'] = (df['DIF'] - df['DEA']) * 2
 
-    # 3. RSI (14)
+    # RSI
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -50,193 +72,218 @@ def calculate_indicators(df):
     return df.fillna(0)
 
 
-def check_kline_patterns(df):
+def analyze_kline_signals(df):
     """
-    单K线/组合形态识别
-    返回识别到的形态名称列表 (如: ['乌云盖顶', '均线多头'])
+    单K线/组合形态识别 (原名 check_kline_patterns，已修正为 analyze_kline_signals)
+    返回: 一个包含信号信息的列表，例如 [{'idx': 10, 'type': 'SELL', 'msg': '乌云盖顶'}]
     """
-    signals = []
+    signals = []  # 这里返回详细对象，用于前端绘图
+    simple_signals = []  # 这里返回字符串列表，用于后端评分
+
     if len(df) < 3:
-        return signals
+        return signals  # 注意：views.py 期望返回详细对象列表，run_analysis_core 期望字符串列表，这里需要兼容
 
-    curr = df.iloc[-1]  # 当天
-    prev = df.iloc[-2]  # 昨天
+    # 我们主要逻辑是为 run_analysis_core 提供字符串列表
+    # 但 views.py 里的 api_stock_detail 需要详细对象
+    # 为了兼容，我们这里统一返回 "字符串列表" 给 run_analysis_core 使用
+    # 对于 api_stock_detail，我们在下面的逻辑中会处理成带索引的对象
 
-    # --- 1. 风险形态识别 (卖出信号) ---
+    # --- 这是一个通用检测，返回的是最近一天的信号字符串列表 ---
 
-    # [长剑指天 / 射击之星]
-    # 定义：上影线长度 > 2倍实体长度，且实体较小，通常在高位
+    curr = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    # [长剑指天]
     body_len = abs(curr['close'] - curr['open'])
     upper_shadow = curr['high'] - max(curr['close'], curr['open'])
     lower_shadow = min(curr['close'], curr['open']) - curr['low']
-
-    # 简单的判定逻辑
     if upper_shadow > 2 * body_len and body_len > 0 and upper_shadow > 2 * lower_shadow:
-        signals.append('长剑指天(风险)')
+        simple_signals.append('长剑指天(风险)')
 
     # [乌云盖顶]
-    # 定义：前一根长阳，今日高开低走大阴线，收盘价切入前一日实体的一半以下
-    if prev['close'] > prev['open']:  # 昨天阳线
+    if prev['close'] > prev['open']:
         mid_point = (prev['open'] + prev['close']) / 2
-        # 今天阴线，开盘高于昨天收盘，收盘低于昨天中点
         if curr['close'] < curr['open'] and curr['open'] > prev['close'] and curr['close'] < mid_point:
-            signals.append('乌云盖顶(见顶)')
+            simple_signals.append('乌云盖顶(见顶)')
 
     # [断头铡刀]
-    # 定义：一根大阴线跌破 MA5, MA10, MA20 三条均线
-    if curr['close'] < curr['open']:  # 阴线
+    if curr['close'] < curr['open']:
         if curr['open'] > max(curr['MA5'], curr['MA10'], curr['MA20']) and \
                 curr['close'] < min(curr['MA5'], curr['MA10'], curr['MA20']):
-            signals.append('断头铡刀(大跌)')
+            simple_signals.append('断头铡刀(大跌)')
 
-    # --- 2. 机会形态识别 (买入信号) ---
-
-    # [均线多头排列]
+    # [均线多头]
     if curr['close'] > curr['MA5'] > curr['MA10'] > curr['MA20']:
-        signals.append('均线多头')
+        simple_signals.append('均线多头')
 
     # [MACD 金叉]
     if prev['DIF'] < prev['DEA'] and curr['DIF'] > curr['DEA']:
-        signals.append('MACD金叉')
+        simple_signals.append('MACD金叉')
+
+    return simple_signals
+
+
+# 为了支持前端详情页的“历史信号标注”，我们需要一个带索引的版本
+# 这个函数专门给 views.py 中的 api_stock_detail 使用
+# 如果你在 views.py 里是直接 import analyze_kline_signals，那我们需要把上面那个改名，或者让 views.py 调用下面这个
+# 鉴于报错是 `cannot import name 'analyze_kline_signals'`，说明 views.py 在找这个名字。
+# 我将保留上面的函数名给 核心分析 用。
+# 并增加一个 `analyze_kline_signals_with_index` 给详情页用，或者修改 views.py。
+# 最简单的办法：修改 analyze_kline_signals 让它对最后一天有效，
+# 同时 views.py 里其实有一段逻辑是 `analyze_kline_signals(df)`，我刚才给你的 views.py 里是有的。
+# 等等，之前的 views.py 代码里： signals = analyze_kline_signals(df)
+# 然后前端用了 signals.map(s => s.idx ... )
+# 这说明 views.py 期望的是带索引的列表！
+
+# 🔥 修正方案：重写 analyze_kline_signals，让它返回带索引的列表 (遍历每一天)
+# 这样 views.py 开心，run_analysis_core 我们稍微改一下取值即可。
+
+def analyze_kline_signals(df):
+    """
+    遍历整个 DataFrame，返回所有触发信号的列表
+    格式: [{'idx': 12, 'type': 'SELL', 'msg': '乌云盖顶'}, ...]
+    """
+    signals = []
+    if len(df) < 5: return signals
+
+    for i in range(2, len(df)):
+        curr = df.iloc[i]
+        prev = df.iloc[i - 1]
+
+        # 1. 均线金叉 (买入)
+        if prev['MA5'] < prev['MA10'] and curr['MA5'] > curr['MA10']:
+            signals.append({'idx': i, 'type': 'BUY', 'msg': 'MA金叉'})
+
+        # 2. 均线死叉 (卖出)
+        if prev['MA5'] > prev['MA10'] and curr['MA5'] < curr['MA10']:
+            signals.append({'idx': i, 'type': 'SELL', 'msg': 'MA死叉'})
+
+        # 3. 乌云盖顶 (卖出)
+        if prev['close'] > prev['open'] and curr['close'] < curr['open']:
+            mid = (prev['close'] + prev['open']) / 2
+            if curr['open'] > prev['close'] and curr['close'] < mid:
+                signals.append({'idx': i, 'type': 'SELL', 'msg': '乌云盖顶'})
+
+        # 4. 长剑指天 (卖出)
+        body = abs(curr['close'] - curr['open'])
+        upper = curr['high'] - max(curr['close'], curr['open'])
+        if upper > 2 * body and body > 0:
+            signals.append({'idx': i, 'type': 'SELL', 'msg': '长剑指天'})
 
     return signals
 
 
 # ==========================================
-# 2. 核心分析函数
+# 3. 核心分析函数
 # ==========================================
 
 def run_analysis_core(target_pattern_data=None, filters=None):
     """
     核心全市场扫描与匹配函数
-
-    参数:
-    - target_pattern_data: list (归一化前的价格序列，如 [10, 12, 11, 15...])
-                           如果为 None，则只进行基础筛选，不进行 DTW 形态匹配。
-    - filters: dict (筛选条件，如 {'minScore': 80, 'marketCap': 'LARGE', ...})
-
-    返回:
-    - results: list (匹配结果列表)
     """
     # 1. 准备形态数据
     has_pattern = target_pattern_data is not None and len(target_pattern_data) > 3
     norm_target = []
 
     if has_pattern:
-        # 对用户输入/预设的形态进行归一化，以便与股票走势比较
         norm_target = normalize_series(target_pattern_data)
 
-    # 2. 获取所有股票基础信息 (用于市值/行业筛选)
+    # 2. 获取所有股票
     all_stocks = StockBasic.objects.all()
     results = []
 
     # 解析筛选参数
     filters = filters or {}
     min_score = float(filters.get('minScore', 60))
-    target_cap = filters.get('marketCap', '')  # 'LARGE', 'MID', 'SMALL' 或 ''
+    target_cap = filters.get('marketCap', '')
     target_sector = filters.get('sector', '')
 
-    # 3. 遍历全市场股票
-    for stock in all_stocks:
-        # --- A. 基础条件筛选 (加速循环) ---
+    # 价格区间筛选
+    min_price_filter = float(filters.get('minPrice') or 0)
+    max_price_filter = float(filters.get('maxPrice') or 99999)
 
-        # 1. 市值筛选 (StockBasic 中的 market_cap 单位为亿元)
+    # 3. 遍历
+    for stock in all_stocks:
+        # --- A. 基础条件筛选 ---
         m_cap = stock.market_cap or 0
         if target_cap == 'SMALL' and m_cap >= 100: continue
         if target_cap == 'MID' and (m_cap < 100 or m_cap > 500): continue
         if target_cap == 'LARGE' and m_cap <= 500: continue
 
-        # 2. 行业筛选 (模糊匹配)
         if target_sector and target_sector not in (stock.industry or ''):
             continue
 
-        # --- B. 获取行情数据 ---
-        # 优化：只取最近 60 个交易日的数据进行匹配，太久的数据无意义且慢
+        # --- B. 获取行情 ---
         qs = StockDaily.objects.filter(ts_code=stock.ts_code).order_by('-trade_date')[:60]
         data = list(qs.values('trade_date', 'open_price', 'close_price', 'high_price', 'low_price', 'vol'))
 
-        # 数据过少则跳过 (刚上市的新股)
-        if len(data) < 20:
-            continue
+        if len(data) < 20: continue
 
-        # 数据库取出是倒序的(最新在前)，转 DataFrame 时要反转为正序(时间轴从左到右)
         df = pd.DataFrame(data[::-1])
-        # 重命名列以符合习惯
         df.rename(columns={'open_price': 'open', 'close_price': 'close', 'high_price': 'high', 'low_price': 'low'},
                   inplace=True)
 
-        # --- C. 计算技术指标 & 形态 ---
+        current_price = df.iloc[-1]['close']
+        if not (min_price_filter <= current_price <= max_price_filter):
+            continue
+
+        # --- C. 计算指标 ---
         df = calculate_indicators(df)
 
-        # 获取最新的 K 线形态信号
-        k_signals = check_kline_patterns(df)
+        # 获取所有历史信号
+        all_signals = analyze_kline_signals(df)
+        # 只取最后一天的信号用于评分
+        last_idx = len(df) - 1
+        current_day_signals = [s['msg'] for s in all_signals if s['idx'] == last_idx]
 
-        # --- D. DTW 形态匹配 (如果有目标形态) ---
+        # --- D. DTW 匹配 ---
         dtw_score = 0
         match_data = []
 
         if has_pattern:
-            # 滑动窗口匹配：取股票最近的一段(长度与目标形态一致)来进行比对
             window_len = len(target_pattern_data)
             if len(df) >= window_len:
-                # 取出最近 window_len 天的收盘价
                 segment = df['close'].iloc[-window_len:].values
-                # 归一化后计算欧氏距离 (FastDTW)
                 dist, _ = fastdtw(norm_target, normalize_series(segment), dist=lambda x, y: abs(x - y))
-                # 将距离转换为分数 (距离越小分数越高)
-                # 这里的公式可以根据需要调整，例如：Score = 100 / (1 + distance)
                 dtw_score = max(0, 100 - dist * 2)
                 match_data = segment.tolist()
             else:
-                # 股票数据不够长，无法匹配
                 dtw_score = 0
 
-        # --- E. 综合评分 & 置信度评估 ---
-
-        # 基础分
+        # --- E. 评分 ---
         if has_pattern:
             final_score = dtw_score
         else:
-            # 如果没选形态，只看基本面，给一个及格分让它能显示出来
             final_score = 60
 
-        # K线信号加分项
         tech_bonus = 0
-        if '均线多头' in k_signals: tech_bonus += 10
-        if 'MACD金叉' in k_signals: tech_bonus += 5
-        if '长剑指天(风险)' in str(k_signals): tech_bonus -= 20  # 风险扣分
-        if '乌云盖顶(见顶)' in str(k_signals): tech_bonus -= 20  # 风险扣分
+        if '均线多头' in current_day_signals: tech_bonus += 10
+        if 'MACD金叉' in current_day_signals: tech_bonus += 5
+        if '长剑指天' in current_day_signals: tech_bonus -= 20
+        if '乌云盖顶' in current_day_signals: tech_bonus -= 20
 
         final_score += tech_bonus
 
-        # 阈值过滤
         if final_score < min_score:
             continue
 
-        # 预测胜率/置信度 (模拟逻辑，真实项目可接入 LSTM 预测值)
-        # 逻辑：基础50% + 分数加成 + 趋势加成
         trend_strength = 0
         if df.iloc[-1]['close'] > df.iloc[-1]['MA20']: trend_strength = 10
-
         confidence = 50 + (final_score - 60) * 0.5 + trend_strength
-        confidence = min(99, max(10, confidence))  # 限制在 10-99 之间
+        confidence = min(99, max(10, confidence))
 
-        # --- F. 打包结果 ---
         results.append({
             'code': stock.ts_code,
             'name': stock.name,
-            'price': round(df.iloc[-1]['close'], 2),
+            'price': round(current_price, 2),
             'score': round(final_score, 1),
-            'confidence': round(confidence, 1),  # AI 置信度
-            'signals': k_signals,  # 触发的K线形态列表
-            'match_data': match_data,  # 匹配到的走势片段(用于前端绘图)
+            'confidence': round(confidence, 1),
+            'signals': current_day_signals,  # 只返回今天的信号名
+            'match_data': match_data,
             'industry': stock.industry,
             'market_cap': stock.market_cap,
-            # 简单的买卖建议标签
             'match_type': 'SELL' if tech_bonus < 0 else 'BUY'
         })
 
-    # 4. 排序与返回
-    # 按分数从高到低排序，取前 30 个
     results.sort(key=lambda x: x['score'], reverse=True)
     return results[:30]

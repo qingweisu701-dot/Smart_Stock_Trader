@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}交易流水{% endblock %}
+{% block title %}模拟交易流水{% endblock %}
 {% block content %}
 <el-card>
     <el-table :data="tableData" stripe style="width: 100%">
@@ -15,6 +15,9 @@
         <el-table-column prop="strategy" label="策略来源"></el-table-column>
     </el-table>
 </el-card>
+{% endblock %}
+
+{% block scripts %}
 <script>
 function pageSetup() {
     const activeMenu = ref('4');

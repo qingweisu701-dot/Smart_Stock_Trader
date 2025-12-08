@@ -79,6 +79,14 @@ class SystemMessage(models.Model):
     related_code = models.CharField(max_length=20, null=True, blank=True)
     is_read = models.BooleanField(default=False)
     create_time = models.DateTimeField(auto_now_add=True)
+    class SystemMessage(models.Model):
+        title = models.CharField(max_length=100, verbose_name='标题')
+        content = models.TextField(verbose_name='内容')
+        related_code = models.CharField(max_length=20, null=True, blank=True, verbose_name='关联股票')
+        is_read = models.BooleanField(default=False)
+        create_time = models.DateTimeField(auto_now_add=True)
 
+        class Meta:
+            ordering = ['-create_time']
     class Meta:
         ordering = ['-create_time']
