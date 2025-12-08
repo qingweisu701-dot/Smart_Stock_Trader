@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}历史策略回测{% endblock %}
+{% block content %}
+<el-container style="height: 85vh; border: 1px solid #eee; background:#fff">
+    <el-aside width="250px" style="border-right:1px solid #eee; padding:10px">
+        <el-input v-model="code" placeholder="输入代码" prefix-icon="Search" @change="runBacktest"></el-input>
+        <div style="margin-top:10px; color:#999; font-size:12px">我的收藏</div>
+        <div v-for="item in favList" :key="item.code" class="fav-item" @click="code=item.code; runBacktest()">
+            [[item.name]] <span style="float:right">[[item.code]]</span>
+        </div>
+    </el-aside>
+    <el-main>
+        <div v-if="result" style="display:flex; justify-content:space-around; background:#f5f7fa; padding:15px; border-radius:4px; margin-bottom:20px">
+            <div>收益率: <b style="color:red; font-size:20px">[[result.metrics.total_return]]%</b></div>
+            <div>最大回撤: <b style="color:green">[[result.metrics.max_drawdown]]%</b></div>
+            <div>胜率: <b>[[result.metrics.win_rate]]%</b></div>
+        </div>
+        <div id="chart" style="height:400px; width:100%"></div>
+    </el-main>
+</el-container>
+{% endblock %}
+
+{% block scripts %}
+<style>.fav-item{padding:10px; cursor:pointer; border-bottom:1px solid #eee} .fav-item:hover{background:#f9f9f9}</style>
+<script>
+function pageSetup() {
+    const code = ref('600519');
+    const favList = ref([]);
+    const result = ref(null);
+    let chart = null;
+
+    const runBacktest = async () => {
+        const res = await axios.post('/api/backtest/run/', {code: code.value});
+        result.value = res.data.data;
+        if(chart) chart.dispose();
+        chart = echarts.init(document.getElementById('chart'));
+
+        const d = res.data.data.chart;
+        chart.setOption({
+            tooltip:{trigger:'axis'}, xAxis:{data:d.map(i=>i.date)}, yAxis:{scale:true},
+            title:{text:'资金收益曲线', left:'center'},
+            series:[{type:'line', data:d.map(i=>i.value), areaStyle:{opacity:0.2}, itemStyle:{color:'#F56C6C'}}]
+        });
+    };
+
+    onMounted(async () => {
+        const res = await axios.get('/api/favorite/list/');
+        favList.value = res.data.data;
+        runBacktest();
+    });
+
+    return { code, favList, result, runBacktest };
+}
+</script>
+{% endblock %}

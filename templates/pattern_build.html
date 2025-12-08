@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}K线形态构造{% endblock %}
+{% block content %}
+<el-row :gutter="20">
+    <el-col :span="16">
+        <el-card>
+            <template #header>
+                <div style="display:flex; justify-content:space-between">
+                    <span>🧱 K线微观构造</span>
+                    <el-button type="primary" @click="saveDialog.visible=true">保存形态</el-button>
+                </div>
+            </template>
+            <div id="kline-editor" style="height:350px;"></div>
+
+            <div v-if="selectedIdx !== null" style="background:#f5f7fa; padding:15px; margin-top:10px; border:1px solid #eee">
+                <div style="font-weight:bold; margin-bottom:10px; color:#409EFF">正在调整第 [[selectedIdx+1]] 根 (拖动滑块)</div>
+                <el-row :gutter="20">
+                    <el-col :span="6"><span>高</span><el-slider v-model="currentCandle.high" :max="100" @input="updateChart"/></el-col>
+                    <el-col :span="6"><span>开</span><el-slider v-model="currentCandle.open" :max="100" @input="updateChart"/></el-col>
+                    <el-col :span="6"><span>收</span><el-slider v-model="currentCandle.close" :max="100" @input="updateChart"/></el-col>
+                    <el-col :span="6"><span>低</span><el-slider v-model="currentCandle.low" :max="100" @input="updateChart"/></el-col>
+                </el-row>
+            </div>
+            <div style="margin-top:15px; text-align:center">
+                <el-button type="success" icon="Plus" @click="addCandle">加一根</el-button>
+                <el-button type="danger" icon="Minus" @click="removeCandle">删选中</el-button>
+            </div>
+        </el-card>
+    </el-col>
+    <el-col :span="8">
+        <el-card header="📚 形态库" style="height:550px; overflow-y:auto">
+            <div v-for="p in presets" class="p-item" @click="loadP(p)">[[p.name]]</div>
+            <div style="border-top:1px solid #eee; margin:10px 0"></div>
+            <div v-for="p in users" class="p-item" @click="loadP(p)">[自] [[p.name]]</div>
+        </el-card>
+    </el-col>
+</el-row>
+<el-dialog v-model="saveDialog.visible" title="保存" width="30%">
+    <el-form><el-form-item label="名称"><el-input v-model="saveDialog.name"/></el-form-item></el-form>
+    <template #footer><el-button type="primary" @click="doSave">保存</el-button></template>
+</el-dialog>
+{% endblock %}
+
+{% block scripts %}
+<style>.p-item { padding:10px; cursor:pointer; border-bottom:1px solid #eee } .p-item:hover{background:#f5f7fa}</style>
+<script>
+function pageSetup() {
+    const klineData = ref([{open:30,close:50,low:20,high:60}]);
+    const selectedIdx = ref(0);
+    const currentCandle = ref({...klineData.value[0]});
+    const presets = ref([]); const users = ref([]);
+    const saveDialog = ref({visible:false, name:''});
+    let chart = null;
+
+    const init = () => {
+        chart = echarts.init(document.getElementById('kline-editor'));
+        chart.on('click', 'series.candlestick', p => {
+            selectedIdx.value = p.dataIndex;
+            currentCandle.value = {...klineData.value[p.dataIndex]};
+        });
+        render();
+        loadList();
+    };
+
+    const render = () => {
+        const d = klineData.value.map(k => [k.open, k.close, k.low, k.high]);
+        chart.setOption({
+            tooltip:{trigger:'axis'}, xAxis:{data:klineData.value.map((_,i)=>i+1)}, yAxis:{scale:true, min:0, max:100},
+            dataZoom: [{type:'inside'}, {type:'slider'}], // 缩放支持
+            series:[{
+                type:'candlestick', data:d,
+                itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'},
+                select:{itemStyle:{borderColor:'#E6A23C', borderWidth:3}}, selectedMode:'single'
+            }]
+        });
+        if(selectedIdx.value!==null) chart.dispatchAction({type:'select', seriesIndex:0, dataIndex:selectedIdx.value});
+    };
+
+    const updateChart = () => { klineData.value[selectedIdx.value] = {...currentCandle.value}; render(); };
+    const addCandle = () => { klineData.value.push({open:50,close:50,high:60,low:40}); render(); };
+    const removeCandle = () => { klineData.value.splice(selectedIdx.value, 1); selectedIdx.value=null; render(); };
+
+    const loadList = async () => {
+        const res = await axios.get('/api/pattern/list/');
+        presets.value = res.data.data.presets;
+        users.value = res.data.data.users.filter(u => u.data[0].open); // 只显示K线形态
+    };
+    const loadP = (p) => {
+        if(typeof p.data[0] === 'number') return ElementPlus.ElMessage.warning('纯趋势无法转K线');
+        klineData.value = p.data; render();
+    };
+    const doSave = async () => {
+        await axios.post('/api/pattern/save/', {name:saveDialog.value.name, type:'KLINE', data:klineData.value});
+        saveDialog.value.visible = false; loadList();
+    };
+
+    onMounted(()=>setTimeout(init, 200));
+    return { klineData, selectedIdx, currentCandle, presets, users, saveDialog, updateChart, addCandle, removeCandle, loadP, doSave };
+}
+</script>
+{% endblock %}

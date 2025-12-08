@@ -1,121 +1,97 @@
 {% extends 'base.html' %}
-{% block title %}收益回测与AI预测{% endblock %}
-
+{% block title %}收益回测与AI{% endblock %}
 {% block content %}
-<el-row :gutter="20">
-    <el-col :span="12">
-        <el-card header="🔮 AI 趋势预测 (LSTM)">
-            <div style="display:flex; gap:10px; margin-bottom:20px">
-                <el-input v-model="predictCode" placeholder="股票代码 (如 000001)" prefix-icon="Search"></el-input>
-                <el-button type="primary" @click="runPredict" :loading="loadingP">开始预测</el-button>
-            </div>
+<el-container style="height: 85vh; border: 1px solid #eee">
+    <el-aside width="250px" style="background:#fff; border-right:1px solid #ddd; padding:10px">
+        <h4>⭐ 待分析股票</h4>
+        <div v-for="item in favList" :key="item.code" class="fav-item" @click="selectStock(item.code)">
+            [[item.name]] <span style="float:right; color:#999">[[item.code]]</span>
+        </div>
+        <div style="margin-top:20px; text-align:center">
+            <el-button size="small" @click="go('/api/analysis/')">➕ 去筛选更多</el-button>
+        </div>
+    </el-aside>
 
-            <div v-if="predictResult" style="text-align:center">
-                <h2 :style="{color: predictResult.suggestion_color}">[[ predictResult.suggestion ]]</h2>
-                <p>未来5日预期收益: <b :style="{color: predictResult.final_return>0?'red':'green'}">[[ predictResult.final_return ]]%</b></p>
-            </div>
-            <div id="predict-chart" style="height:350px; width:100%"></div>
-        </el-card>
-    </el-col>
+    <el-main>
+        <div style="margin-bottom:15px; display:flex; gap:10px">
+            <el-input v-model="targetCode" placeholder="输入代码" style="width:200px"></el-input>
+            <el-button type="primary" @click="runAll">开始分析</el-button>
+        </div>
 
-    <el-col :span="12">
-        <el-card header="📊 历史策略回测 (MA均线策略)">
-            <div style="display:flex; gap:10px; margin-bottom:20px">
-                <el-input v-model="backtestCode" placeholder="股票代码 (如 600519)" prefix-icon="Search"></el-input>
-                <el-button type="success" @click="runBacktest" :loading="loadingB">运行回测</el-button>
-            </div>
-
-            <div v-if="backtestResult" style="display:flex; justify-content:space-around; text-align:center; margin-bottom:15px; background:#f5f7fa; padding:10px; border-radius:4px">
-                <div>
-                    <div style="font-size:12px; color:#909399">总收益率</div>
-                    <div style="font-size:18px; font-weight:bold" :style="{color: backtestResult.metrics.total_return>0?'red':'green'}">
-                        [[ backtestResult.metrics.total_return ]]%
-                    </div>
+        <el-tabs type="border-card">
+            <el-tab-pane label="🔮 AI 趋势预测">
+                <div v-if="predictRes" style="text-align:center; padding:20px">
+                    <h2>[[ predictRes.suggestion ]]</h2>
+                    <p>未来5日预期: <b :style="{color: predictRes.final_return>0?'red':'green'}">[[ predictRes.final_return ]]%</b></p>
                 </div>
-                <div>
-                    <div style="font-size:12px; color:#909399">最大回撤</div>
-                    <div style="font-size:18px; font-weight:bold; color:green">[[ backtestResult.metrics.max_drawdown ]]%</div>
-                </div>
-                <div>
-                    <div style="font-size:12px; color:#909399">胜率</div>
-                    <div style="font-size:18px; font-weight:bold; color:#E6A23C">[[ backtestResult.metrics.win_rate ]]%</div>
-                </div>
-            </div>
+                <div id="p-chart" style="height:400px"></div>
+            </el-tab-pane>
 
-            <div id="backtest-chart" style="height:350px; width:100%"></div>
-        </el-card>
-    </el-col>
-</el-row>
+            <el-tab-pane label="📊 历史策略回测">
+                <div v-if="backtestRes" style="display:flex; justify-content:space-around; padding:15px; background:#f9f9f9">
+                    <div>收益: <b style="color:red">[[backtestRes.metrics.total_return]]%</b></div>
+                    <div>回撤: <b style="color:green">[[backtestRes.metrics.max_drawdown]]%</b></div>
+                    <div>胜率: <b>[[backtestRes.metrics.win_rate]]%</b></div>
+                </div>
+                <div id="b-chart" style="height:400px; margin-top:20px"></div>
+            </el-tab-pane>
+        </el-tabs>
+    </el-main>
+</el-container>
 {% endblock %}
 
 {% block scripts %}
+<style>.fav-item { padding:10px; cursor:pointer; border-bottom:1px solid #eee } .fav-item:hover{background:#ecf5ff}</style>
 <script>
 function pageSetup() {
     const activeMenu = ref('3');
-    const predictCode = ref('000001');
-    const loadingP = ref(false);
-    const predictResult = ref(null);
-    let chartP = null;
+    const favList = ref([]);
+    const targetCode = ref('000001');
+    const predictRes = ref(null);
+    const backtestRes = ref(null);
+    let chartP=null, chartB=null;
 
-    const backtestCode = ref('600519');
-    const loadingB = ref(false);
-    const backtestResult = ref(null);
-    let chartB = null;
+    const go = (url) => window.location.href = url;
 
-    const runPredict = async () => {
-        loadingP.value = true;
-        try {
-            const res = await axios.post('/api/prediction/run/', { code: predictCode.value });
-            if (res.data.code === 200) {
-                predictResult.value = res.data.data;
-                setTimeout(() => drawPredictChart(res.data.data), 100);
-            } else { ElementPlus.ElMessage.error(res.data.msg); }
-        } finally { loadingP.value = false; }
+    onMounted(async () => {
+        const res = await axios.get('/api/favorite/list/');
+        favList.value = res.data.data;
+    });
+
+    const selectStock = (code) => { targetCode.value = code; runAll(); };
+
+    const runAll = async () => {
+        // AI 预测
+        const res1 = await axios.post('/api/prediction/run/', {code: targetCode.value});
+        predictRes.value = res1.data.data;
+        setTimeout(() => {
+            if(chartP) chartP.dispose();
+            chartP = echarts.init(document.getElementById('p-chart'));
+            const d = predictRes.value;
+            const x = [...d.history_dates, ...d.future_dates];
+            const y1 = d.history_prices;
+            const y2 = Array(y1.length-1).fill(null).concat([y1[y1.length-1]], d.future_prices);
+            chartP.setOption({
+                tooltip:{trigger:'axis'}, xAxis:{data:x}, yAxis:{scale:true},
+                series:[{type:'line', data:y1, name:'历史'}, {type:'line', data:y2, name:'预测', lineStyle:{type:'dashed'}}]
+            });
+        }, 100);
+
+        // 回测
+        const res2 = await axios.post('/api/backtest/run/', {code: targetCode.value});
+        backtestRes.value = res2.data.data;
+        setTimeout(() => {
+            if(chartB) chartB.dispose();
+            chartB = echarts.init(document.getElementById('b-chart'));
+            const d = backtestRes.value.chart;
+            chartB.setOption({
+                tooltip:{trigger:'axis'}, xAxis:{data:d.map(i=>i.date)}, yAxis:{scale:true},
+                series:[{type:'line', data:d.map(i=>i.value), areaStyle:{opacity:0.2}}]
+            });
+        }, 100);
     };
 
-    const runBacktest = async () => {
-        loadingB.value = true;
-        try {
-            const res = await axios.post('/api/backtest/run/', { code: backtestCode.value });
-            if (res.data.code === 200) {
-                backtestResult.value = res.data.data;
-                setTimeout(() => drawBacktestChart(res.data.data.chart), 100);
-            } else { ElementPlus.ElMessage.error('数据不足或计算失败'); }
-        } finally { loadingB.value = false; }
-    };
-
-    const drawPredictChart = (data) => {
-        if (chartP) chartP.dispose();
-        chartP = echarts.init(document.getElementById('predict-chart'));
-        const xData = [...data.history_dates, ...data.future_dates];
-        const seriesFuture = new Array(data.history_prices.length - 1).fill(null);
-        seriesFuture.push(data.history_prices[data.history_prices.length - 1]);
-        seriesFuture.push(...data.future_prices);
-
-        chartP.setOption({
-            tooltip: { trigger: 'axis' },
-            legend: { data: ['历史', '预测'] },
-            xAxis: { type: 'category', data: xData },
-            yAxis: { scale: true },
-            series: [
-                { name: '历史', type: 'line', data: data.history_prices, itemStyle: {color: '#333'} },
-                { name: '预测', type: 'line', data: seriesFuture, itemStyle: {color: '#409EFF'}, lineStyle: {type: 'dashed'} }
-            ]
-        });
-    };
-
-    const drawBacktestChart = (chartData) => {
-        if (chartB) chartB.dispose();
-        chartB = echarts.init(document.getElementById('backtest-chart'));
-        chartB.setOption({
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: chartData.map(i => i.date) },
-            yAxis: { scale: true },
-            series: [{ name: '总资产', type: 'line', data: chartData.map(i => i.value), smooth: true, areaStyle: { opacity: 0.1 }, itemStyle: {color: '#F56C6C'} }]
-        });
-    };
-
-    return { activeMenu, predictCode, loadingP, predictResult, runPredict, backtestCode, loadingB, backtestResult, runBacktest };
+    return { activeMenu, favList, targetCode, predictRes, backtestRes, selectStock, runAll, go };
 }
 </script>
 {% endblock %}

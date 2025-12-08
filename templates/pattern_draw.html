@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}趋势手绘实验室{% endblock %}
+{% block content %}
+<el-row :gutter="20" style="height: calc(100vh - 120px);">
+    <el-col :span="16" style="height:100%">
+        <el-card style="height:100%; display:flex; flex-direction:column">
+            <template #header>
+                <div style="display:flex; justify-content:space-between">
+                    <span>🖌️ 宏观趋势手绘</span>
+                    <div>
+                        <el-button type="danger" icon="Delete" plain @click="clearDraw">清空</el-button>
+                        <el-button type="primary" icon="Check" @click="prepareSave">保存形态</el-button>
+                    </div>
+                </div>
+            </template>
+            <div style="flex:1; border:1px dashed #ccc; cursor:crosshair" id="draw-canvas"></div>
+            <div style="text-align:center; color:#999; margin-top:10px">💡 按住左键绘制，松开暂存，可多笔绘制</div>
+        </el-card>
+    </el-col>
+
+    <el-col :span="8" style="height:100%">
+        <el-card header="📚 形态库" style="height:100%; overflow-y:auto">
+            <div v-for="p in presets" class="p-item" @click="loadP(p)">
+                <el-tag size="small" :type="p.type==='BUY'?'danger':'success'">[[p.type]]</el-tag> <b>[[p.name]]</b>
+            </div>
+            <div style="border-top:1px solid #eee; margin:10px 0"></div>
+            <div v-for="p in users" class="p-item" @click="loadP(p)">
+                <el-tag size="small" type="info">自</el-tag> [[p.name]]
+            </div>
+        </el-card>
+    </el-col>
+</el-row>
+
+<el-dialog v-model="saveDialog.visible" title="智能保存" width="30%">
+    <div v-if="aiTrend" :class="aiTrend==='BUY'?'ai-box-buy':'ai-box-sell'">AI识别：[[aiTrend]]</div>
+    <el-form style="margin-top:15px">
+        <el-form-item label="名称"><el-input v-model="saveDialog.name"/></el-form-item>
+        <el-form-item label="类型">
+            <el-radio-group v-model="saveDialog.desc">
+                <el-radio label="BUY">买入</el-radio><el-radio label="SELL">卖出</el-radio>
+            </el-radio-group>
+        </el-form-item>
+    </el-form>
+    <template #footer><el-button type="primary" @click="doSave">保存</el-button></template>
+</el-dialog>
+{% endblock %}
+
+{% block scripts %}
+<style>.p-item { padding:10px; border-bottom:1px solid #eee; cursor:pointer } .p-item:hover{background:#f5f7fa} .ai-box-buy{color:green;background:#eaffea;padding:10px} .ai-box-sell{color:red;background:#ffeaea;padding:10px}</style>
+<script>
+function pageSetup() {
+    const presets = ref([]); const users = ref([]);
+    const saveDialog = ref({visible:false, name:'', desc:'BUY'});
+    const aiTrend = ref('');
+    let drawChart=null, drawPoints=[], isDrawing=false;
+
+    const init = () => {
+        drawChart = echarts.init(document.getElementById('draw-canvas'));
+        drawChart.getZr().on('mousedown', ()=>{isDrawing=true});
+        drawChart.getZr().on('mousemove', e=>{
+            if(!isDrawing) return;
+            const pt = drawChart.convertFromPixel({seriesIndex:0}, [e.offsetX, e.offsetY]);
+            if(pt) { drawPoints.push(pt[1]); render(); }
+        });
+        drawChart.getZr().on('mouseup', ()=>{isDrawing=false});
+        render();
+        loadList();
+    };
+    const render = () => {
+        drawChart.setOption({
+            grid:{top:10,bottom:10}, xAxis:{show:false, data:drawPoints.map((_,i)=>i)}, yAxis:{min:0,max:100,show:false},
+            series:[{type:'line', data:drawPoints, smooth:0.3, showSymbol:false, lineStyle:{width:3, color:'#409EFF'}}]
+        });
+    };
+    const loadList = async () => {
+        const res = await axios.get('/api/pattern/list/');
+        presets.value = res.data.data.presets;
+        users.value = res.data.data.users.filter(u => !u.data[0].open); // 过滤掉K线数据
+    };
+    const loadP = (p) => {
+        if(typeof p.data[0] === 'object') return ElementPlus.ElMessage.warning('这是K线数据，请去K线精调页面');
+        drawPoints = p.data; render();
+    };
+    const clearDraw = () => { drawPoints=[]; render(); };
+    const prepareSave = async () => {
+        if(drawPoints.length<5) return ElementPlus.ElMessage.warning('太短了');
+        const res = await axios.post('/api/pattern/analyze/', {type:'DRAW', data:drawPoints});
+        aiTrend.value = res.data.data.trend;
+        saveDialog.value.desc = aiTrend.value==='SELL'?'SELL':'BUY';
+        saveDialog.value.visible = true;
+    };
+    const doSave = async () => {
+        await axios.post('/api/pattern/save/', {name:saveDialog.value.name, desc:saveDialog.value.desc, type:'DRAW', data:drawPoints});
+        saveDialog.value.visible = false; loadList();
+    };
+    onMounted(()=>setTimeout(init, 200));
+    return { presets, users, saveDialog, aiTrend, clearDraw, loadP, prepareSave, doSave };
+}
+</script>
+{% endblock %}
