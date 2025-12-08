@@ -39,10 +39,7 @@ def calculate_technical_indicators(df):
 
     return df.fillna(0)
 
-
-# ==========================================
 # 2. 策略动态检查器
-# ==========================================
 def check_strategies(df, strategy_list, logic_type='AND'):
     """
     动态检查策略组合
@@ -131,13 +128,20 @@ def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
     # 解析高级策略配置
     strategy_list = filters.get('strategies', []) if filters else []
     logic_type = filters.get('logic', 'OR') if filters else 'OR'
-
+    query_code = filters.get('codeQuery', '') if filters else ''
     for code in all_codes:
         # --- 0. 基础筛选 ---
         if filters:
+            # 1. 代码/名称筛选 (新增逻辑)
+            # 如果用户输入了内容，且当前 code 不包含该内容，则跳过
+            if query_code and query_code not in code:
+                continue
+
+            # 2. 行业筛选
             stock_sector = mock_stock_info.get(code, {}).get('sector', 'Other')
             if filters.get('sector') and filters['sector'] != stock_sector: continue
 
+            # 3. 市值筛选
             stock_cap = mock_stock_info.get(code, {}).get('cap', 'SMALL')
             if filters.get('marketCap') and filters['marketCap'] != stock_cap: continue
 

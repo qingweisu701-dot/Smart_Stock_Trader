@@ -63,37 +63,43 @@
                             </el-col>
                         </el-row>
 
-                        <el-row :gutter="20" align="middle" style="background: #f9fafc; padding: 15px; border-radius: 4px;">
+                       <el-row :gutter="10" align="middle" style="background: #f9fafc; padding: 15px; border-radius: 4px;">
                             <el-col :span="2" style="text-align: right; color: #666; font-size: 14px; font-weight: bold;">
                                 🎯 基础筛选:
                             </el-col>
-                            <el-col :span="4">
+
+                            <el-col :span="3">
+                                <el-input v-model="filters.codeQuery" placeholder="代码过滤" size="small" clearable prefix-icon="Search"></el-input>
+                            </el-col>
+
+                            <el-col :span="3">
                                 <el-select v-model="filters.sector" placeholder="所属行业" clearable size="small">
                                     <el-option label="金融行业" value="Finance"></el-option>
                                     <el-option label="科技半导体" value="Tech"></el-option>
                                     <el-option label="新能源" value="Energy"></el-option>
                                 </el-select>
                             </el-col>
-                            <el-col :span="6">
+
+                            <el-col :span="5">
                                 <div style="display: flex; align-items: center;">
-                                    <el-input v-model="filters.minPrice" placeholder="最低价" size="small" style="width: 80px"></el-input>
-                                    <span style="margin: 0 5px">-</span>
-                                    <el-input v-model="filters.maxPrice" placeholder="最高价" size="small" style="width: 80px"></el-input>
+                                    <el-input v-model="filters.minPrice" placeholder="最低价" size="small" style="width: 70px"></el-input>
+                                    <span style="margin: 0 5px; color:#ccc">-</span>
+                                    <el-input v-model="filters.maxPrice" placeholder="最高价" size="small" style="width: 70px"></el-input>
                                 </div>
                             </el-col>
 
                             <el-col :span="6">
-                                <el-button type="warning" icon="Setting" plain size="default" @click="strategyDialogVisible = true">
-                                    ⚙️ 配置技术指标策略
+                                <el-button type="warning" icon="Setting" plain size="small" style="width: 100%" @click="strategyDialogVisible = true">
+                                    配置指标策略
                                     <span v-if="selectedStrategies.length > 0" style="margin-left: 5px; font-weight: bold">
                                         ([[ selectedStrategies.length ]])
                                     </span>
                                 </el-button>
                             </el-col>
 
-                            <el-col :span="6" style="text-align: right;">
-                                <el-button type="success" icon="Cpu" size="large" @click="submitPattern">
-                                    开始多因子匹配
+                            <el-col :span="5" style="text-align: right;">
+                                <el-button type="success" icon="Cpu" size="default" @click="submitPattern" style="width: 100%">
+                                    开始匹配
                                 </el-button>
                             </el-col>
                         </el-row>
@@ -223,7 +229,14 @@
                 const statusText = ref('就绪');
                 const matchResult = ref([]);
                 const tradeMode = ref('BUY');
-                const filters = ref({ sector: '', minPrice: '', maxPrice: '', marketCap: '' });
+                // 新增了 codeQuery 字段
+                const filters = ref({
+                    codeQuery: '', // <--- 新增
+                    sector: '',
+                    minPrice: '',
+                    maxPrice: '',
+                    marketCap: ''
+                });
 
                 // 弹窗变量
                 const tableDialogVisible = ref(false);
