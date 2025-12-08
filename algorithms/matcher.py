@@ -4,13 +4,13 @@ from fastdtw import fastdtw
 from data_engine.models import StockDaily, StockBasic
 
 # ==========================================
-# 1. 24种专业形态库 (完全对应你的图片需求)
+# 🔥 1. 24种专业形态库 (完全对应你的图片需求)
 # ==========================================
 PRESET_PATTERNS = {
     # --- 📈 看涨形态 (Bullish) ---
     'hammer_low': {
         'type': 'KLINE', 'signal': 'BUY', 'desc': '低位倒锤线',
-        'data': [{'open': 20, 'close': 25, 'low': 20, 'high': 60}]  # 长上影
+        'data': [{'open': 20, 'close': 25, 'low': 20, 'high': 60}]  # 长上影，实体在下
     },
     'doji_low': {
         'type': 'KLINE', 'signal': 'BUY', 'desc': '低位十字星',
@@ -27,8 +27,11 @@ PRESET_PATTERNS = {
     },
     'morning_star': {
         'type': 'KLINE', 'signal': 'BUY', 'desc': '启明之星',
-        'data': [{'open': 80, 'close': 20, 'low': 15, 'high': 85}, {'open': 10, 'close': 15, 'low': 5, 'high': 20},
-                 {'open': 25, 'close': 70, 'low': 20, 'high': 75}]
+        'data': [
+            {'open': 80, 'close': 20, 'low': 15, 'high': 85},  # 阴
+            {'open': 10, 'close': 15, 'low': 5, 'high': 20},  # 星
+            {'open': 25, 'close': 70, 'low': 20, 'high': 75}  # 阳
+        ]
     },
     'bullish_engulfing': {
         'type': 'KLINE', 'signal': 'BUY', 'desc': '看涨吞没',
@@ -42,6 +45,7 @@ PRESET_PATTERNS = {
         'type': 'KLINE', 'signal': 'BUY', 'desc': '平头底部',
         'data': [{'open': 60, 'close': 20, 'low': 10, 'high': 65}, {'open': 20, 'close': 50, 'low': 10, 'high': 55}]
     },
+    # 趋势类
     'five_waves': {'type': 'DRAW', 'signal': 'BUY', 'desc': '五浪上涨(趋势)', 'data': [0, 60, 30, 80, 50, 100]},
     'w_bottom': {'type': 'DRAW', 'signal': 'BUY', 'desc': 'W底(双底)', 'data': [100, 0, 50, 0, 100]},
     'v_reversal': {'type': 'DRAW', 'signal': 'BUY', 'desc': 'V型反转', 'data': [100, 0, 100]},
@@ -79,6 +83,7 @@ PRESET_PATTERNS = {
         'type': 'KLINE', 'signal': 'SELL', 'desc': '下降覆盖(乌云盖顶)',
         'data': [{'open': 20, 'close': 80, 'low': 15, 'high': 85}, {'open': 90, 'close': 50, 'low': 45, 'high': 95}]
     },
+    # 趋势类
     'm_top': {'type': 'DRAW', 'signal': 'SELL', 'desc': 'M头(双顶)', 'data': [0, 100, 50, 100, 0]},
     'head_shoulders': {'type': 'DRAW', 'signal': 'SELL', 'desc': '头肩顶', 'data': [0, 70, 40, 100, 40, 70, 0]},
 }
@@ -129,7 +134,7 @@ def analyze_kline_signals(df):
 
 
 # ==========================================
-# 3. 核心扫描
+# 3. 核心扫描 (核心逻辑增强)
 # ==========================================
 def run_analysis_core(target_pattern_data=None, filters=None):
     target_series = []
@@ -141,6 +146,7 @@ def run_analysis_core(target_pattern_data=None, filters=None):
             target_series = target_pattern_data
             has_pattern = True
         elif isinstance(target_pattern_data[0], dict):
+            # 如果是K线，提取收盘价序列做匹配
             target_series = [x['close'] for x in target_pattern_data]
             has_pattern = True
 

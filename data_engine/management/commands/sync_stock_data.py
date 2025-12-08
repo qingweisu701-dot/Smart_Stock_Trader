@@ -4,8 +4,10 @@ import time
 from django.core.management.base import BaseCommand
 from data_engine.models import StockDaily, StockBasic
 from datetime import datetime, timedelta
-
-
+import os
+os.environ['HTTP_PROXY'] = ''
+os.environ['HTTPS_PROXY'] = ''
+os.environ['ALL_PROXY'] = ''
 class Command(BaseCommand):
     help = '多源金融数据智能采集与标准化处理模块'
 

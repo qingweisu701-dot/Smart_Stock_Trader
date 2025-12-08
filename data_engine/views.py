@@ -9,7 +9,7 @@ from algorithms.backtest import run_backtest_strategy
 import json, datetime
 import pandas as pd
 import numpy as np
-
+from .models import PatternFavorite
 
 # ==================== 页面渲染 ====================
 def page_pattern_draw(request):
@@ -28,6 +28,70 @@ def page_pattern_lab(request):
     return render(request, 'pattern_lab.html')
 
 
+@csrf_exempt
+def api_pattern_list(request):
+    """获取形态列表（含收藏状态）"""
+    # 1. 获取用户收藏的形态ID集合
+    fav_qs = PatternFavorite.objects.all()
+    # 格式化为 "PRESET:five_waves" 或 "USER:12"
+    fav_ids = set([f"{f.pattern_type}:{f.pattern_id}" for f in fav_qs])
+
+    # 2. 预设形态
+    presets = []
+    for k, v in PRESET_PATTERNS.items():
+        is_fav = f"PRESET:{k}" in fav_ids
+        presets.append({
+            'id': k,
+            'name': v['desc'],
+            'data': v['data'],
+            'type': v.get('signal', 'BUY'),  # 使用 signal 字段
+            'is_fav': is_fav
+        })
+
+    # 3. 用户自定义
+    users = []
+    for u in UserPattern.objects.all():
+        try:
+            # 判断数据格式
+            data = json.loads(u.data_points) if u.source_type == 'KLINE' else [float(x) for x in
+                                                                               u.data_points.split(',')]
+            is_fav = f"USER:{u.id}" in fav_ids
+            # 判断是买还是卖 (存库时在 desc 字段里标记了)
+            signal = 'BUY' if 'BUY' in u.description else 'SELL'
+
+            users.append({
+                'id': u.id,
+                'name': u.name,
+                'data': data,
+                'type': signal,
+                'source': 'USER',  # 标记来源
+                'is_fav': is_fav
+            })
+        except:
+            pass
+
+    return JsonResponse({'code': 200, 'data': {'presets': presets, 'users': users}})
+
+
+@csrf_exempt
+def api_pattern_fav_toggle(request):
+    """收藏/取消收藏形态"""
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            pid = str(body.get('id'))
+            # 这里的 type 指的是来源类型 (PRESET/USER)，不是买卖类型
+            # 前端传过来的可能是 "PRESET" 或 "USER"
+            ptype = body.get('source_type')
+
+            obj, created = PatternFavorite.objects.get_or_create(pattern_id=pid, pattern_type=ptype)
+            if not created:
+                obj.delete()  # 存在则删除
+                return JsonResponse({'code': 200, 'msg': '已取消收藏', 'status': False})
+            return JsonResponse({'code': 200, 'msg': '收藏成功', 'status': True})
+        except Exception as e:
+            return JsonResponse({'code': 500, 'msg': str(e)})
+    return JsonResponse({'code': 405})
 def page_analysis_scan(request):
     """市场扫描页"""
     return render(request, 'analysis_scan.html')
