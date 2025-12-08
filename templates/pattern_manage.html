@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}图形管理实验室{% endblock %}
+{% block content %}
+<el-row :gutter="20">
+    <el-col :span="14">
+        <el-card header="📏 形态绘制板">
+            <div id="draw-chart" style="height:400px; width:100%;"></div>
+            <div style="margin-top:15px; text-align:center">
+                <el-button @click="clearDraw">清空重画</el-button>
+                <el-button type="primary" @click="saveDialogVisible=true">保存形态到库</el-button>
+            </div>
+        </el-card>
+    </el-col>
+    <el-col :span="10">
+        <el-card header="📚 形态清单">
+            <el-tabs>
+                <el-tab-pane label="系统预设 (专业)">
+                    <div v-for="p in presets" :key="p.id" class="pattern-item" @click="loadPattern(p.data)">
+                        <b>[[p.name]]</b>
+                        <el-tag size="small" :type="p.type==='BUY'?'danger':'success'">[[p.type==='BUY'?'看涨':'看跌']]</el-tag>
+                    </div>
+                </el-tab-pane>
+                <el-tab-pane label="我的手绘">
+                    <div v-for="p in userPatterns" :key="p.id" class="pattern-item" @click="loadPattern(p.data)">
+                        [[p.name]] <span style="font-size:12px;color:#999">[[p.desc]]</span>
+                    </div>
+                </el-tab-pane>
+            </el-tabs>
+        </el-card>
+    </el-col>
+</el-row>
+
+<el-dialog v-model="saveDialogVisible" title="保存形态">
+    <el-input v-model="newPatternName" placeholder="形态名称 (如: 我的V型底)"></el-input>
+    <el-input v-model="newPatternDesc" placeholder="描述 (可选)" style="margin-top:10px"></el-input>
+    <template #footer><el-button type="primary" @click="savePattern">确定保存</el-button></template>
+</el-dialog>
+
+<style>.pattern-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; } .pattern-item:hover { background: #f5f7fa; }</style>
+
+<script>
+function pageSetup() {
+    const activeMenu = ref('1');
+    const presets = ref([]);
+    const userPatterns = ref([]);
+    const saveDialogVisible = ref(false);
+    const newPatternName = ref('');
+    const newPatternDesc = ref('');
+
+    let myChart = null;
+    let drawData = []; // [[x, y], ...]
+    let isDrawing = false;
+
+    // ECharts 初始化与绘图逻辑
+    const initChart = () => {
+        myChart = echarts.init(document.getElementById('draw-chart'));
+        // ... (此处复用之前 kline_chart.html 的绘图逻辑，简化展示)
+        const option = {
+            grid: {top:20, bottom:20},
+            xAxis: {type: 'value', min:0, max:100, show:false},
+            yAxis: {type: 'value', min:0, max:100, show:false},
+            series: [{ type: 'line', data: [], smooth: 0.3, symbol: 'none' }]
+        };
+        myChart.setOption(option);
+
+        const zr = myChart.getZr();
+        zr.on('mousedown', () => { isDrawing=true; drawData=[]; });
+        zr.on('mousemove', (e) => {
+            if(!isDrawing) return;
+            const pt = myChart.convertFromPixel({seriesIndex:0}, [e.offsetX, e.offsetY]);
+            drawData.push(pt);
+            myChart.setOption({series:[{data: drawData}]});
+        });
+        zr.on('mouseup', () => isDrawing=false);
+    };
+
+    const loadList = async () => {
+        const res = await axios.get('/api/pattern/list/');
+        presets.value = res.data.data.presets;
+        userPatterns.value = res.data.data.users;
+    };
+
+    const loadPattern = (dataArr) => {
+        // 将一维 Y 轴数组转换为 [[x,y]] 格式显示
+        const showData = dataArr.map((y, i) => [i * (100/(dataArr.length-1)), y * 10]); // 简单缩放
+        myChart.setOption({series:[{data: showData}]});
+        drawData = showData; // 存下来用于匹配或保存
+    };
+
+    const savePattern = async () => {
+        // 提取 Y 轴数据并归一化
+        const yData = drawData.map(p => p[1]);
+        await axios.post('/api/pattern/save/', { name: newPatternName.value, desc: newPatternDesc.value, data: yData });
+        saveDialogVisible.value = false;
+        loadList();
+    };
+
+    const clearDraw = () => { drawData=[]; myChart.setOption({series:[{data:[]}]}); };
+
+    onMounted(() => { initChart(); loadList(); });
+    return { activeMenu, presets, userPatterns, saveDialogVisible, newPatternName, newPatternDesc, loadPattern, savePattern, clearDraw };
+}
+</script>
+{% endblock %}

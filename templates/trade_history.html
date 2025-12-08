@@ -1,171 +1,29 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-    <meta charset="UTF-8">
-    <title>历史回测记录 | 智能股票系统</title>
-    <link rel="stylesheet" href="{% static 'css/element-plus.css' %}">
-    <style>
-        /* 全局重置 */
-        body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; background-color: #f0f2f5; }
-
-        /* 布局样式 */
-        .el-aside { background-color: #001529; color: white; height: 100vh; transition: width 0.3s; }
-        .logo-area { height: 60px; line-height: 60px; text-align: center; font-size: 20px; font-weight: bold; background: #002140; color: white; overflow: hidden;}
-        .el-header { background-color: #fff; box-shadow: 0 1px 4px rgba(0,21,41,.08); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
-
-        /* 内容区 */
-        .main-card { margin-bottom: 20px; border-radius: 4px; }
-    </style>
-</head>
-<body>
-
-    <div id="app">
-        <el-container>
-            <el-aside width="220px">
-                <div class="logo-area">🤖 智能决策系统</div>
-                <el-menu
-                    active-text-color="#409EFF"
-                    background-color="#001529"
-                    text-color="#fff"
-                    default-active="2-2">
-
-                    <el-menu-item index="1" @click="goUrl('/api/chart/')">
-                        <i class="el-icon-s-home"></i>
-                        <span>系统首页</span>
-                    </el-menu-item>
-
-                    <el-sub-menu index="2">
-                        <template #title>
-                            <span>模式匹配分析</span>
-                        </template>
-                        <el-menu-item index="2-1" @click="goUrl('/api/chart/')">特定走势筛选</el-menu-item>
-                        <el-menu-item index="2-2">历史回测记录</el-menu-item>
-                    </el-sub-menu>
-
-                    <el-menu-item index="3" @click="goUrl('/api/prediction/')">
-                        <span>量化预测中心</span>
-                    </el-menu-item>
-                </el-menu>
-            </el-aside>
-
-            <el-container>
-                <el-header>
-                    <div class="breadcrumb">
-                        <el-breadcrumb separator="/">
-                            <el-breadcrumb-item>首页</el-breadcrumb-item>
-                            <el-breadcrumb-item>模式匹配分析</el-breadcrumb-item>
-                            <el-breadcrumb-item>历史回测记录</el-breadcrumb-item>
-                        </el-breadcrumb>
-                    </div>
-                    <div class="user-info">
-                        <el-avatar size="small" style="background-color: #409EFF">User</el-avatar>
-                    </div>
-                </el-header>
-
-                <el-main>
-                    <el-card class="main-card" shadow="hover">
-                        <div slot="header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <span style="font-weight: bold; font-size: 16px;">📜 模拟交易流水</span>
-                            <el-button type="primary" icon="Refresh" circle @click="loadData" plain></el-button>
-                        </div>
-
-                        <el-table :data="tableData" stripe style="width: 100%" v-loading="loading" border>
-                            <el-table-column prop="time" label="操作时间" width="180"></el-table-column>
-
-                            <el-table-column prop="code" label="股票代码" width="120">
-                                <template #default="scope">
-                                    <el-tag effect="dark">[[ scope.row.code ]]</el-tag>
-                                </template>
-                            </el-table-column>
-
-                            <el-table-column prop="type" label="交易方向" width="100">
-                                <template #default="scope">
-                                    <el-tag :type="scope.row.type === 'BUY' ? 'danger' : 'success'" effect="dark">
-                                        [[ scope.row.type === 'BUY' ? '买入' : '卖出' ]]
-                                    </el-tag>
-                                </template>
-                            </el-table-column>
-
-                            <el-table-column prop="price" label="成交均价">
-                                <template #default="scope">
-                                    <span style="font-weight: bold;">¥ [[ scope.row.price ]]</span>
-                                </template>
-                            </el-table-column>
-
-                            <el-table-column prop="volume" label="成交量" width="120">
-                                <template #default="scope">[[ scope.row.volume ]] 手</template>
-                            </el-table-column>
-
-                            <el-table-column prop="strategy" label="触发策略/信号" min-width="150">
-                                <template #default="scope">
-                                    <el-tag effect="plain" type="info">[[ scope.row.strategy ]]</el-tag>
-                                </template>
-                            </el-table-column>
-
-                            <el-table-column label="状态">
-                                <template #default="scope">
-                                    <el-tag type="success" size="small">成交</el-tag>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-                    </el-card>
-                </el-main>
-            </el-container>
-        </el-container>
-    </div>
-
-    <script src="{% static 'js/vue.global.js' %}"></script>
-    <script src="{% static 'js/element-plus.js' %}"></script>
-    <script src="{% static 'js/element-plus-icons.js' %}"></script>
-    <script src="{% static 'js/axios.min.js' %}"></script>
-
-    <script>
-        const { createApp, ref, onMounted } = Vue;
-
-        const app = createApp({
-            // 避免 Django 模板冲突
-            delimiters: ['[[', ']]'],
-            setup() {
-                const tableData = ref([]);
-                const loading = ref(false);
-
-                // 加载数据
-                const loadData = async () => {
-                    loading.value = true;
-                    try {
-                        const res = await axios.get('/api/history/data/');
-                        if (res.data.code === 200) {
-                            tableData.value = res.data.data;
-                            ElementPlus.ElMessage.success('记录已刷新');
-                        } else {
-                            ElementPlus.ElMessage.error(res.data.msg);
-                        }
-                    } catch (e) {
-                        ElementPlus.ElMessage.error('无法连接服务器');
-                    } finally {
-                        loading.value = false;
-                    }
-                };
-
-                // 页面跳转函数
-                const goUrl = (url) => {
-                    window.location.href = url;
-                };
-
-                onMounted(() => {
-                    loadData();
-                });
-
-                return { tableData, loading, loadData, goUrl };
-            }
-        });
-
-        app.use(ElementPlus);
-        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-            app.component(key, component)
-        }
-        app.mount('#app');
-    </script>
-</body>
-</html>
+{% extends 'base.html' %}
+{% block title %}交易流水{% endblock %}
+{% block content %}
+<el-card>
+    <el-table :data="tableData" stripe style="width: 100%">
+        <el-table-column prop="date" label="日期" width="120"></el-table-column>
+        <el-table-column prop="code" label="代码" width="100"></el-table-column>
+        <el-table-column prop="type" label="方向">
+            <template #default="scope">
+                <el-tag :type="scope.row.type==='BUY'?'danger':'success'">[[scope.row.type==='BUY'?'买入':'卖出']]</el-tag>
+            </template>
+        </el-table-column>
+        <el-table-column prop="price" label="价格"></el-table-column>
+        <el-table-column prop="volume" label="数量"></el-table-column>
+        <el-table-column prop="strategy" label="策略来源"></el-table-column>
+    </el-table>
+</el-card>
+<script>
+function pageSetup() {
+    const activeMenu = ref('4');
+    const tableData = ref([]);
+    onMounted(async () => {
+        const res = await axios.get('/api/trade/data/');
+        tableData.value = res.data.data;
+    });
+    return { activeMenu, tableData };
+}
+</script>
+{% endblock %}

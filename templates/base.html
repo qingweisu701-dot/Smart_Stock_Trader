@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>智能量化投研平台</title>
+    <link rel="stylesheet" href="{% static 'css/element-plus.css' %}">
+    <script src="{% static 'js/vue.global.js' %}"></script>
+    <script src="{% static 'js/element-plus.js' %}"></script>
+    <script src="{% static 'js/element-plus-icons.js' %}"></script>
+    <script src="{% static 'js/echarts.min.js' %}"></script>
+    <script src="{% static 'js/axios.min.js' %}"></script>
+    <style>
+        body { margin: 0; background: #f5f7fa; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif; }
+        .el-aside { background: #001529; color: white; height: 100vh; }
+        .logo-area { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; }
+        .main-header { background: #fff; height: 60px; display: flex; align-items: center; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,21,41,.08); }
+        .el-menu { border-right: none; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <el-container>
+            <el-aside width="200px">
+                <div class="logo-area">🚀 量化投研平台</div>
+                <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF" :default-active="activeMenu">
+                    <el-menu-item index="1" @click="go('/api/pattern/manage/')"><el-icon><Edit /></el-icon><span>图形管理实验室</span></el-menu-item>
+                    <el-menu-item index="2" @click="go('/api/analysis/')"><el-icon><Data-Analysis /></el-icon><span>市场扫描与分析</span></el-menu-item>
+                    <el-menu-item index="3" @click="go('/api/prediction/')"><el-icon><Trend-Charts /></el-icon><span>收益回测与AI</span></el-menu-item>
+                    <el-menu-item index="4" @click="go('/api/trade/history/')"><el-icon><List /></el-icon><span>模拟交易流水</span></el-menu-item>
+                </el-menu>
+            </el-aside>
+            <el-container>
+                <el-header class="main-header">
+                    <h3>{% block title %}首页{% endblock %}</h3>
+                </el-header>
+                <el-main>
+                    {% block content %}{% endblock %}
+                </el-main>
+            </el-container>
+        </el-container>
+    </div>
+    <script>
+        const { createApp, ref, onMounted, computed } = Vue;
+        const app = createApp({
+            delimiters: ['[[', ']]'],
+            setup() {
+                const activeMenu = ref('1');
+                const go = (url) => window.location.href = url;
+                // 子页面逻辑挂载点
+                return { activeMenu, go, ...(typeof pageSetup === 'function' ? pageSetup() : {}) };
+            }
+        });
+        app.use(ElementPlus);
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component) }
+        app.mount('#app');
+    </script>
+</body>
+</html>
