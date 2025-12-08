@@ -1,170 +1,137 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-    <meta charset="UTF-8">
-    <title>量化预测中心 | AI Stock</title>
-    <link rel="stylesheet" href="{% static 'css/element-plus.css' %}">
-    <style>
-        body { margin: 0; padding: 0; background-color: #f0f2f5; font-family: sans-serif; }
-        .el-aside { background: #001529; color: white; height: 100vh; }
-        .el-header { background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
-        .logo-area { height: 60px; line-height: 60px; text-align: center; font-weight: bold; font-size: 20px; color: white; background: #002140; }
+{% extends 'base.html' %}
+{% block title %}收益回测与AI预测{% endblock %}
 
-        .predict-card { margin-top: 20px; text-align: center; padding: 30px; }
-        .suggestion-box { font-size: 24px; font-weight: bold; margin: 20px 0; }
-        .chart-box { height: 500px; width: 100%; margin-top: 20px; }
-    </style>
-</head>
-<body>
-    <div id="app">
-        <el-container>
-            <el-aside width="220px">
-                <div class="logo-area">🤖 智能决策系统</div>
-                <el-menu active-text-color="#409EFF" background-color="#001529" text-color="#fff" default-active="3">
-                    <el-menu-item index="1" @click="goUrl('/api/chart/')"><i class="el-icon-s-home"></i><span>系统首页</span></el-menu-item>
-                    <el-sub-menu index="2">
-                        <template #title><span>模式匹配分析</span></template>
-                        <el-menu-item index="2-1" @click="goUrl('/api/chart/')">特定走势筛选</el-menu-item>
-                        <el-menu-item index="2-2" @click="goUrl('/api/history/')">历史回测记录</el-menu-item>
-                    </el-sub-menu>
-                    <el-menu-item index="3" @click="window.location.href='/api/prediction/'"><span>量化预测中心</span></el-menu-item>
-                </el-menu>
-            </el-aside>
+{% block content %}
+<el-row :gutter="20">
+    <el-col :span="12">
+        <el-card header="🔮 AI 趋势预测 (LSTM)">
+            <div style="display:flex; gap:10px; margin-bottom:20px">
+                <el-input v-model="predictCode" placeholder="股票代码 (如 000001)" prefix-icon="Search"></el-input>
+                <el-button type="primary" @click="runPredict" :loading="loadingP">开始预测</el-button>
+            </div>
 
-            <el-container>
-                <el-header>
-                    <h3>🔮 AI 量化预测中心 (LSTM Model)</h3>
-                    <el-tag>V 1.0.0</el-tag>
-                </el-header>
+            <div v-if="predictResult" style="text-align:center">
+                <h2 :style="{color: predictResult.suggestion_color}">[[ predictResult.suggestion ]]</h2>
+                <p>未来5日预期收益: <b :style="{color: predictResult.final_return>0?'red':'green'}">[[ predictResult.final_return ]]%</b></p>
+            </div>
 
-                <el-main>
-                    <el-card shadow="hover">
-                        <el-row :gutter="20">
-                            <el-col :span="18">
-                                <el-input v-model="stockCode" placeholder="输入股票代码 (如 000001)" size="large">
-                                    <template #prepend>股票代码</template>
-                                </el-input>
-                            </el-col>
-                            <el-col :span="6">
-                                <el-button type="primary" size="large" @click="runPrediction" :loading="loading" style="width: 100%">
-                                    开始预测未来5日
-                                </el-button>
-                            </el-col>
-                        </el-row>
-                    </el-card>
+            <div id="predict-chart" style="height:350px; width:100%"></div>
+        </el-card>
+    </el-col>
 
-                    <el-card v-if="result" class="predict-card" shadow="always">
-                        <h3>📈 [[ stockCode ]] 预测分析报告</h3>
+    <el-col :span="12">
+        <el-card header="📊 历史策略回测 (MA均线策略)">
+            <div style="display:flex; gap:10px; margin-bottom:20px">
+                <el-input v-model="backtestCode" placeholder="股票代码 (如 600519)" prefix-icon="Search"></el-input>
+                <el-button type="success" @click="runBacktest" :loading="loadingB">运行回测</el-button>
+            </div>
 
-                        <div class="suggestion-box" :style="{ color: result.suggestion_color === 'red' ? '#F56C6C' : '#67C23A' }">
-                            [[ result.suggestion ]]
-                        </div>
+            <div v-if="backtestResult" style="display:flex; justify-content:space-around; text-align:center; margin-bottom:15px; background:#f5f7fa; padding:10px; border-radius:4px">
+                <div>
+                    <div style="font-size:12px; color:#909399">总收益率</div>
+                    <div style="font-size:18px; font-weight:bold" :style="{color: backtestResult.metrics.total_return>0?'red':'green'}">
+                        [[ backtestResult.metrics.total_return ]]%
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#909399">最大回撤</div>
+                    <div style="font-size:18px; font-weight:bold; color:green">[[ backtestResult.metrics.max_drawdown ]]%</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#909399">胜率</div>
+                    <div style="font-size:18px; font-weight:bold; color:#E6A23C">[[ backtestResult.metrics.win_rate ]]%</div>
+                </div>
+            </div>
 
-                        <p>预计未来5日累计收益率:
-                            <span :style="{ fontWeight: 'bold', color: result.final_return > 0 ? 'red' : 'green' }">
-                                [[ result.final_return ]]%
-                            </span>
-                        </p>
+            <div id="backtest-chart" style="height:350px; width:100%"></div>
+        </el-card>
+    </el-col>
+</el-row>
 
-                        <div id="predict-chart" class="chart-box"></div>
-                    </el-card>
-                </el-main>
-            </el-container>
-        </el-container>
-    </div>
+<script>
+function pageSetup() {
+    const activeMenu = ref('3');
 
-    <script src="{% static 'js/vue.global.js' %}"></script>
-    <script src="{% static 'js/element-plus.js' %}"></script>
-    <script src="{% static 'js/element-plus-icons.js' %}"></script>
-    <script src="{% static 'js/echarts.min.js' %}"></script>
-    <script src="{% static 'js/axios.min.js' %}"></script>
+    // AI 预测相关
+    const predictCode = ref('000001');
+    const loadingP = ref(false);
+    const predictResult = ref(null);
+    let chartP = null;
 
-    <script>
-        const { createApp, ref } = Vue;
-        const app = createApp({
-            delimiters: ['[[', ']]'],
-            setup() {
-                const stockCode = ref('000001');
-                const loading = ref(false);
-                const result = ref(null);
-                let myChart = null;
+    // 回测相关
+    const backtestCode = ref('600519');
+    const loadingB = ref(false);
+    const backtestResult = ref(null);
+    let chartB = null;
 
-                const goUrl = (url) => window.location.href = url;
+    // 运行 AI 预测
+    const runPredict = async () => {
+        loadingP.value = true;
+        try {
+            const res = await axios.post('/api/prediction/run/', { code: predictCode.value });
+            if (res.data.code === 200) {
+                predictResult.value = res.data.data;
+                setTimeout(() => drawPredictChart(res.data.data), 100);
+            } else { ElementPlus.ElMessage.error(res.data.msg); }
+        } finally { loadingP.value = false; }
+    };
 
-                const runPrediction = async () => {
-                    loading.value = true;
-                    result.value = null;
-                    try {
-                        // 模拟加载时间，让用户觉得算法在努力计算
-                        await new Promise(r => setTimeout(r, 800));
+    // 运行回测
+    const runBacktest = async () => {
+        loadingB.value = true;
+        try {
+            const res = await axios.post('/api/backtest/run/', { code: backtestCode.value });
+            if (res.data.code === 200) {
+                backtestResult.value = res.data.data;
+                setTimeout(() => drawBacktestChart(res.data.data.chart), 100);
+            } else { ElementPlus.ElMessage.error('数据不足或计算失败'); }
+        } finally { loadingB.value = false; }
+    };
 
-                        const res = await axios.post('/api/prediction/run/', { code: stockCode.value });
+    // 绘图: AI 预测
+    const drawPredictChart = (data) => {
+        if (chartP) chartP.dispose();
+        chartP = echarts.init(document.getElementById('predict-chart'));
 
-                        if (res.data.code === 200) {
-                            result.value = res.data.data;
-                            // 等待 DOM 渲染后再画图
-                            setTimeout(() => renderChart(), 100);
-                            ElementPlus.ElMessage.success('预测完成');
-                        } else {
-                            ElementPlus.ElMessage.error(res.data.msg);
-                        }
-                    } catch (e) {
-                        ElementPlus.ElMessage.error('系统错误');
-                    } finally {
-                        loading.value = false;
-                    }
-                };
+        const historyData = data.history_prices;
+        const futureData = data.future_prices;
+        const xData = [...data.history_dates, ...data.future_dates];
 
-                const renderChart = () => {
-                    const dom = document.getElementById('predict-chart');
-                    myChart = echarts.init(dom);
+        // 拼接数据让线条连贯
+        const seriesFuture = new Array(historyData.length - 1).fill(null);
+        seriesFuture.push(historyData[historyData.length - 1]); // 连接点
+        seriesFuture.push(...futureData);
 
-                    const data = result.value;
-                    // 拼接历史和未来数据，中间稍微断开或连接
-                    // 简单起见，我们把历史的最后一个点作为未来的起点
-                    const fullDates = [...data.history_dates, ...data.future_dates];
-
-                    // 历史数据填充 (未来部分补 null)
-                    const historySeries = [...data.history_prices, ...new Array(data.future_prices.length).fill(null)];
-
-                    // 未来数据填充 (历史部分补 null，注意衔接)
-                    // 为了让线连起来，把历史最后一个点加进去
-                    const lastHistoryPrice = data.history_prices[data.history_prices.length - 1];
-                    const futureSeries = new Array(data.history_prices.length - 1).fill(null);
-                    futureSeries.push(lastHistoryPrice);
-                    futureSeries.push(...data.future_prices);
-
-                    const option = {
-                        tooltip: { trigger: 'axis' },
-                        legend: { data: ['历史走势', 'AI预测走势'] },
-                        xAxis: { type: 'category', data: fullDates },
-                        yAxis: { scale: true },
-                        series: [
-                            {
-                                name: '历史走势',
-                                type: 'line',
-                                data: historySeries,
-                                itemStyle: { color: '#333' },
-                                showSymbol: false
-                            },
-                            {
-                                name: 'AI预测走势',
-                                type: 'line',
-                                data: futureSeries,
-                                lineStyle: { type: 'dashed', width: 3, color: '#409EFF' }, // 虚线
-                                itemStyle: { color: '#409EFF' }
-                            }
-                        ]
-                    };
-                    myChart.setOption(option);
-                };
-
-                return { stockCode, loading, result, runPrediction, goUrl };
-            }
+        chartP.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['历史', '预测'] },
+            xAxis: { type: 'category', data: xData },
+            yAxis: { scale: true },
+            series: [
+                { name: '历史', type: 'line', data: historyData, itemStyle: {color: '#333'} },
+                { name: '预测', type: 'line', data: seriesFuture, itemStyle: {color: '#409EFF'}, lineStyle: {type: 'dashed'} }
+            ]
         });
-        app.use(ElementPlus);
-        app.mount('#app');
-    </script>
-</body>
-</html>
+    };
+
+    // 绘图: 资金曲线
+    const drawBacktestChart = (chartData) => {
+        if (chartB) chartB.dispose();
+        chartB = echarts.init(document.getElementById('backtest-chart'));
+
+        const dates = chartData.map(i => i.date);
+        const values = chartData.map(i => i.value);
+
+        chartB.setOption({
+            tooltip: { trigger: 'axis' },
+            title: { text: '账户资金曲线', left: 'center', textStyle: {fontSize: 14} },
+            xAxis: { type: 'category', data: dates },
+            yAxis: { scale: true },
+            series: [{ name: '总资产', type: 'line', data: values, smooth: true, areaStyle: { opacity: 0.1 }, itemStyle: {color: '#F56C6C'} }]
+        });
+    };
+
+    return { activeMenu, predictCode, loadingP, predictResult, runPredict, backtestCode, loadingB, backtestResult, runBacktest };
+}
+</script>
+{% endblock %}

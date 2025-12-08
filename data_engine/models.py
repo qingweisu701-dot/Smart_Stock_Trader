@@ -1,7 +1,6 @@
 from django.db import models
 
 
-# 1. 股票基础信息 (用于市值筛选、行业分类)
 class StockBasic(models.Model):
     ts_code = models.CharField(max_length=20, verbose_name='股票代码', primary_key=True)
     name = models.CharField(max_length=20, verbose_name='股票名称')
@@ -11,13 +10,11 @@ class StockBasic(models.Model):
 
     class Meta:
         verbose_name = '股票列表'
-        verbose_name_plural = verbose_name
 
     def __str__(self):
         return f"{self.name} ({self.ts_code})"
 
 
-# 2. 日线行情 (核心数据)
 class StockDaily(models.Model):
     ts_code = models.CharField(max_length=20, verbose_name='股票代码', db_index=True)
     trade_date = models.DateField(verbose_name='交易日期', db_index=True)
@@ -33,55 +30,55 @@ class StockDaily(models.Model):
         indexes = [models.Index(fields=['ts_code', 'trade_date'])]
         constraints = [models.UniqueConstraint(fields=['ts_code', 'trade_date'], name='unique_stock_date')]
 
-    def __str__(self):
-        return f"{self.ts_code} - {self.trade_date}"
 
-
-# 3. [新增] 图形形态库 (预设+用户手绘)
 class UserPattern(models.Model):
-    PATTERN_TYPES = (('PRESET', '系统预设'), ('CUSTOM', '用户自定义'))
+    PATTERN_TYPES = (('DRAW', '趋势手绘'), ('KLINE', 'K线构造'))
 
     name = models.CharField(max_length=50, verbose_name='形态名称')
-    type = models.CharField(max_length=10, choices=PATTERN_TYPES, default='CUSTOM')
-    description = models.CharField(max_length=200, blank=True, verbose_name='形态含义(买入/卖出)')
-    # 存储归一化后的Y轴数据点，逗号分隔，如 "0.1,0.5,0.8,0.2"
-    data_points = models.TextField(verbose_name='数据点序列')
+    source_type = models.CharField(max_length=10, choices=PATTERN_TYPES, default='DRAW')
+    description = models.CharField(max_length=200, blank=True, verbose_name='形态含义')
+    # 存储核心数据：
+    # 如果是 DRAW: "0.1,0.2,0.5..." (纯趋势序列)
+    # 如果是 KLINE: JSON字符串，存储 [{"open":10, "close":12...}, {...}]
+    data_points = models.TextField(verbose_name='数据序列')
     create_time = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = '形态管理'
         ordering = ['-create_time']
 
-    def get_data_list(self):
-        return [float(x) for x in self.data_points.split(',')]
 
-
-# 4. [新增] 自选股收藏
 class FavoriteStock(models.Model):
+    GROUPS = (('DEFAULT', '默认分组'), ('WATCH', '观察仓'), ('TOP', '龙头股'))
     ts_code = models.CharField(max_length=20, verbose_name='股票代码')
+    group = models.CharField(max_length=20, choices=GROUPS, default='DEFAULT', verbose_name='分组')
     add_time = models.DateTimeField(auto_now_add=True)
     notes = models.CharField(max_length=100, blank=True, verbose_name='备注')
 
     class Meta:
-        verbose_name = '自选股'
         constraints = [models.UniqueConstraint(fields=['ts_code'], name='unique_fav_stock')]
 
 
-# 5. 交易记录 (升级：支持卖出)
 class TradeRecord(models.Model):
     TRADE_TYPES = (('BUY', '买入'), ('SELL', '卖出'))
-
-    ts_code = models.CharField(max_length=20, verbose_name='股票代码')
-    trade_date = models.DateField(verbose_name='交易日期')
-    trade_type = models.CharField(max_length=10, choices=TRADE_TYPES, verbose_name='交易方向')
-    price = models.FloatField(verbose_name='成交单价')
-    volume = models.IntegerField(default=100, verbose_name='成交数量(股)')
-    strategy_name = models.CharField(max_length=50, verbose_name='策略来源', default='手动交易')
-
-    # 卖出时计算盈亏
-    pnl = models.FloatField(null=True, blank=True, verbose_name='盈亏金额')
+    ts_code = models.CharField(max_length=20)
+    trade_date = models.DateField()
+    trade_type = models.CharField(max_length=10, choices=TRADE_TYPES)
+    price = models.FloatField()
+    volume = models.IntegerField(default=100)
+    strategy_name = models.CharField(max_length=50, default='手动交易')
+    pnl = models.FloatField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = '交易记录'
+        ordering = ['-create_time']
+
+
+class SystemMessage(models.Model):
+    title = models.CharField(max_length=100)
+    content = models.TextField()
+    related_code = models.CharField(max_length=20, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    create_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
         ordering = ['-create_time']

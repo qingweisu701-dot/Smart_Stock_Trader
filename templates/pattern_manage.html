@@ -2,103 +2,249 @@
 {% block title %}图形管理实验室{% endblock %}
 {% block content %}
 <el-row :gutter="20">
-    <el-col :span="14">
-        <el-card header="📏 形态绘制板">
-            <div id="draw-chart" style="height:400px; width:100%;"></div>
-            <div style="margin-top:15px; text-align:center">
-                <el-button @click="clearDraw">清空重画</el-button>
-                <el-button type="primary" @click="saveDialogVisible=true">保存形态到库</el-button>
-            </div>
+    <el-col :span="10">
+        <el-card>
+            <template #header>
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <span>🖌️ 趋势线手绘 (宏观)</span>
+                    <div>
+                        <el-button size="small" type="danger" icon="Delete" @click="clearDraw" plain>重画</el-button>
+                        <el-button size="small" type="primary" @click="openSaveDialog('DRAW')">保存趋势</el-button>
+                    </div>
+                </div>
+            </template>
+            <div class="tip-box">按住鼠标左键绘制价格走势曲线</div>
+            <div id="draw-canvas" style="height:400px; border:1px solid #eee; cursor:crosshair"></div>
         </el-card>
     </el-col>
-    <el-col :span="10">
-        <el-card header="📚 形态清单">
-            <el-tabs>
-                <el-tab-pane label="系统预设 (专业)">
-                    <div v-for="p in presets" :key="p.id" class="pattern-item" @click="loadPattern(p.data)">
-                        <b>[[p.name]]</b>
-                        <el-tag size="small" :type="p.type==='BUY'?'danger':'success'">[[p.type==='BUY'?'看涨':'看跌']]</el-tag>
+
+    <el-col :span="14">
+        <el-card>
+            <template #header>
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <span>🧱 K线形态构造 (微观)</span>
+                    <div>
+                        <el-button size="small" type="success" @click="addCandle">➕ 加一根</el-button>
+                        <el-button size="small" type="danger" @click="removeCandle">➖ 删一根</el-button>
+                        <el-button size="small" type="primary" @click="openSaveDialog('KLINE')">保存K线</el-button>
                     </div>
-                </el-tab-pane>
-                <el-tab-pane label="我的手绘">
-                    <div v-for="p in userPatterns" :key="p.id" class="pattern-item" @click="loadPattern(p.data)">
-                        [[p.name]] <span style="font-size:12px;color:#999">[[p.desc]]</span>
+                </div>
+            </template>
+
+            <el-row :gutter="10">
+                <el-col :span="16">
+                    <div id="kline-builder" style="height:350px;"></div>
+                </el-col>
+                <el-col :span="8" style="background:#f9f9f9; padding:10px; border-radius:4px">
+                    <div v-if="selectedCandleIndex !== null">
+                        <div style="font-weight:bold; margin-bottom:10px; text-align:center">
+                            编辑第 <span style="color:red">[[ selectedCandleIndex + 1 ]]</span> 根K线
+                        </div>
+
+                        <div class="slider-group">
+                            <span class="label">最高价 (High)</span>
+                            <el-slider v-model="currentCandle.high" :min="0" :max="100" @input="updateKLine"></el-slider>
+                        </div>
+                        <div class="slider-group">
+                            <span class="label">开盘价 (Open)</span>
+                            <el-slider v-model="currentCandle.open" :min="0" :max="100" @input="updateKLine"></el-slider>
+                        </div>
+                        <div class="slider-group">
+                            <span class="label">收盘价 (Close)</span>
+                            <el-slider v-model="currentCandle.close" :min="0" :max="100" @input="updateKLine"></el-slider>
+                        </div>
+                        <div class="slider-group">
+                            <span class="label">最低价 (Low)</span>
+                            <el-slider v-model="currentCandle.low" :min="0" :max="100" @input="updateKLine"></el-slider>
+                        </div>
                     </div>
-                </el-tab-pane>
-            </el-tabs>
+                    <div v-else style="color:#999; text-align:center; padding-top:100px">
+                        请点击左侧图表中的<br>K线柱体进行编辑
+                    </div>
+                </el-col>
+            </el-row>
+
+            <el-table :data="klineData" size="small" border style="margin-top:10px" height="150">
+                <el-table-column label="序号" type="index" width="50"></el-table-column>
+                <el-table-column label="开盘"><template #default="s"><el-input-number v-model="s.row.open" size="small" :controls="false" @change="updateKLine"/></template></el-table-column>
+                <el-table-column label="收盘"><template #default="s"><el-input-number v-model="s.row.close" size="small" :controls="false" @change="updateKLine"/></template></el-table-column>
+                <el-table-column label="最高"><template #default="s"><el-input-number v-model="s.row.high" size="small" :controls="false" @change="updateKLine"/></template></el-table-column>
+                <el-table-column label="最低"><template #default="s"><el-input-number v-model="s.row.low" size="small" :controls="false" @change="updateKLine"/></template></el-table-column>
+            </el-table>
         </el-card>
     </el-col>
 </el-row>
 
-<el-dialog v-model="saveDialogVisible" title="保存形态">
-    <el-input v-model="newPatternName" placeholder="形态名称 (如: 我的V型底)"></el-input>
-    <el-input v-model="newPatternDesc" placeholder="描述 (可选)" style="margin-top:10px"></el-input>
-    <template #footer><el-button type="primary" @click="savePattern">确定保存</el-button></template>
+<el-dialog v-model="saveDialog.visible" title="保存自定义形态" width="30%">
+    <el-form label-width="80px">
+        <el-form-item label="名称">
+            <el-input v-model="saveDialog.name" placeholder="如: 乌云盖顶变体"></el-input>
+        </el-form-item>
+        <el-form-item label="方向">
+             <el-radio-group v-model="saveDialog.desc">
+                 <el-radio label="看涨(Buy)">🔴 看涨</el-radio>
+                 <el-radio label="看跌(Sell)">🟢 看跌</el-radio>
+             </el-radio-group>
+        </el-form-item>
+    </el-form>
+    <template #footer><el-button type="primary" @click="submitSave">保存</el-button></template>
 </el-dialog>
 
-<style>.pattern-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; } .pattern-item:hover { background: #f5f7fa; }</style>
+<style>
+    .slider-group { margin-bottom: 10px; }
+    .slider-group .label { font-size: 12px; color: #666; display: block; margin-bottom: -5px; }
+    .tip-box { background: #f0f9eb; color: #67c23a; padding: 5px 10px; font-size: 12px; border-radius: 3px; margin-bottom: 10px; }
+</style>
 
 <script>
 function pageSetup() {
     const activeMenu = ref('1');
-    const presets = ref([]);
-    const userPatterns = ref([]);
-    const saveDialogVisible = ref(false);
-    const newPatternName = ref('');
-    const newPatternDesc = ref('');
+    const drawChart = ref(null);
+    const klineChart = ref(null);
 
-    let myChart = null;
-    let drawData = []; // [[x, y], ...]
+    // 鼠标绘图数据
+    let lineData = [];
     let isDrawing = false;
 
-    // ECharts 初始化与绘图逻辑
-    const initChart = () => {
-        myChart = echarts.init(document.getElementById('draw-chart'));
-        // ... (此处复用之前 kline_chart.html 的绘图逻辑，简化展示)
-        const option = {
-            grid: {top:20, bottom:20},
-            xAxis: {type: 'value', min:0, max:100, show:false},
-            yAxis: {type: 'value', min:0, max:100, show:false},
-            series: [{ type: 'line', data: [], smooth: 0.3, symbol: 'none' }]
-        };
-        myChart.setOption(option);
+    // K线构造数据 (默认给一个阳线一个阴线)
+    const klineData = ref([
+        { open: 20, close: 50, high: 60, low: 10 },
+        { open: 55, close: 35, high: 65, low: 30 }
+    ]);
+    const selectedCandleIndex = ref(null);
+    const currentCandle = ref({}); // 当前正在编辑的K线数据副本
+
+    const saveDialog = ref({ visible: false, type: '', name: '', desc: '看涨(Buy)' });
+
+    // 初始化图表
+    onMounted(() => {
+        initDrawChart();
+        initKlineChart();
+    });
+
+    const initDrawChart = () => {
+        const myChart = echarts.init(document.getElementById('draw-canvas'));
+        drawChart.value = myChart;
+        myChart.setOption({
+            grid: { top: 10, bottom: 10, left: 10, right: 10 },
+            xAxis: { type: 'value', show: false, min: 0, max: 100 },
+            yAxis: { type: 'value', show: false, min: 0, max: 100 },
+            series: [{ type: 'line', data: [], smooth: 0.3, showSymbol: false, lineStyle: {width: 3, color: '#409EFF'} }]
+        });
 
         const zr = myChart.getZr();
-        zr.on('mousedown', () => { isDrawing=true; drawData=[]; });
+        zr.on('mousedown', () => { isDrawing = true; lineData = []; });
         zr.on('mousemove', (e) => {
-            if(!isDrawing) return;
-            const pt = myChart.convertFromPixel({seriesIndex:0}, [e.offsetX, e.offsetY]);
-            drawData.push(pt);
-            myChart.setOption({series:[{data: drawData}]});
+            if (!isDrawing) return;
+            const pt = myChart.convertFromPixel({ seriesIndex: 0 }, [e.offsetX, e.offsetY]);
+            lineData.push(pt);
+            myChart.setOption({ series: [{ data: lineData }] });
         });
-        zr.on('mouseup', () => isDrawing=false);
+        zr.on('mouseup', () => isDrawing = false);
     };
 
-    const loadList = async () => {
-        const res = await axios.get('/api/pattern/list/');
-        presets.value = res.data.data.presets;
-        userPatterns.value = res.data.data.users;
+    const initKlineChart = () => {
+        const myChart = echarts.init(document.getElementById('kline-builder'));
+        klineChart.value = myChart;
+
+        myChart.on('click', 'series.candlestick', (params) => {
+            // 点击K线，进入编辑模式
+            selectedCandleIndex.value = params.dataIndex;
+            // 绑定当前数据到滑块对象 (深度拷贝)
+            currentCandle.value = { ...klineData.value[params.dataIndex] };
+        });
+
+        renderKline();
     };
 
-    const loadPattern = (dataArr) => {
-        // 将一维 Y 轴数组转换为 [[x,y]] 格式显示
-        const showData = dataArr.map((y, i) => [i * (100/(dataArr.length-1)), y * 10]); // 简单缩放
-        myChart.setOption({series:[{data: showData}]});
-        drawData = showData; // 存下来用于匹配或保存
+    const renderKline = () => {
+        // 转换数据格式给 ECharts [Open, Close, Low, High]
+        const echartsData = klineData.value.map(item => [item.open, item.close, item.low, item.high]);
+
+        klineChart.value.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+            grid: { top: 20, bottom: 20, left: 30, right: 30 },
+            xAxis: { data: klineData.value.map((_, i) => i + 1) },
+            yAxis: { scale: true, min: 0, max: 100 },
+            series: [{
+                type: 'candlestick',
+                data: echartsData,
+                itemStyle: {
+                    color: '#ef232a', // 阳线红
+                    color0: '#14b143', // 阴线绿
+                    borderColor: '#ef232a',
+                    borderColor0: '#14b143'
+                },
+                // 高亮选中状态
+                select: { itemStyle: { borderColor: '#E6A23C', borderWidth: 2 } },
+                selectedMode: 'single'
+            }]
+        });
+
+        // 保持选中状态
+        if (selectedCandleIndex.value !== null) {
+            klineChart.value.dispatchAction({
+                type: 'select',
+                seriesIndex: 0,
+                dataIndex: selectedCandleIndex.value
+            });
+        }
     };
 
-    const savePattern = async () => {
-        // 提取 Y 轴数据并归一化
-        const yData = drawData.map(p => p[1]);
-        await axios.post('/api/pattern/save/', { name: newPatternName.value, desc: newPatternDesc.value, data: yData });
-        saveDialogVisible.value = false;
-        loadList();
+    // 滑块拖动回调
+    const updateKLine = () => {
+        if (selectedCandleIndex.value !== null) {
+            // 将滑块的值同步回数据源
+            klineData.value[selectedCandleIndex.value] = { ...currentCandle.value };
+            renderKline();
+        }
     };
 
-    const clearDraw = () => { drawData=[]; myChart.setOption({series:[{data:[]}]}); };
+    const addCandle = () => {
+        klineData.value.push({ open: 50, close: 50, high: 60, low: 40 });
+        renderKline();
+    };
 
-    onMounted(() => { initChart(); loadList(); });
-    return { activeMenu, presets, userPatterns, saveDialogVisible, newPatternName, newPatternDesc, loadPattern, savePattern, clearDraw };
+    const removeCandle = () => {
+        if (klineData.value.length > 1) {
+            klineData.value.pop();
+            selectedCandleIndex.value = null;
+            renderKline();
+        }
+    };
+
+    const clearDraw = () => {
+        lineData = [];
+        drawChart.value.setOption({ series: [{ data: [] }] });
+    };
+
+    const openSaveDialog = (type) => {
+        saveDialog.value.type = type;
+        saveDialog.value.visible = true;
+    };
+
+    const submitSave = async () => {
+        let payload = {};
+        if (saveDialog.value.type === 'DRAW') {
+            if (lineData.length < 5) return ElementPlus.ElMessage.warning('绘制数据太少');
+            // 只取Y轴数据，归一化
+            const yData = lineData.map(p => p[1]);
+            payload = { type: 'DRAW', name: saveDialog.value.name, desc: saveDialog.value.desc, data: yData };
+        } else {
+            // 保存K线序列
+            payload = { type: 'KLINE', name: saveDialog.value.name, desc: saveDialog.value.desc, data: klineData.value };
+        }
+
+        try {
+            await axios.post('/api/pattern/save/', payload);
+            ElementPlus.ElMessage.success('形态保存成功，可前往分析页面使用');
+            saveDialog.value.visible = false;
+        } catch (e) {
+            ElementPlus.ElMessage.error('保存失败');
+        }
+    };
+
+    return { activeMenu, drawChart, klineData, selectedCandleIndex, currentCandle, updateKLine, addCandle, removeCandle, clearDraw, openSaveDialog, saveDialog, submitSave };
 }
 </script>
 {% endblock %}

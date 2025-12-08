@@ -11,44 +11,63 @@
     <script src="{% static 'js/echarts.min.js' %}"></script>
     <script src="{% static 'js/axios.min.js' %}"></script>
     <style>
-        body { margin: 0; background: #f5f7fa; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif; }
+        body { margin: 0; background: #f0f2f5; font-family: 'PingFang SC', sans-serif; }
         .el-aside { background: #001529; color: white; height: 100vh; }
-        .logo-area { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; }
-        .main-header { background: #fff; height: 60px; display: flex; align-items: center; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,21,41,.08); }
-        .el-menu { border-right: none; }
+        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; }
+        .header { background: #fff; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
     <div id="app">
         <el-container>
             <el-aside width="200px">
-                <div class="logo-area">🚀 量化投研平台</div>
+                <div class="logo">📈 Smart Trader</div>
                 <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF" :default-active="activeMenu">
                     <el-menu-item index="1" @click="go('/api/pattern/manage/')"><el-icon><Edit /></el-icon><span>图形管理实验室</span></el-menu-item>
-                    <el-menu-item index="2" @click="go('/api/analysis/')"><el-icon><Data-Analysis /></el-icon><span>市场扫描与分析</span></el-menu-item>
-                    <el-menu-item index="3" @click="go('/api/prediction/')"><el-icon><Trend-Charts /></el-icon><span>收益回测与AI</span></el-menu-item>
+                    <el-menu-item index="2" @click="go('/api/analysis/')"><el-icon><Trend-Charts /></el-icon><span>市场扫描与分析</span></el-menu-item>
+                    <el-menu-item index="3" @click="go('/api/prediction/')"><el-icon><Cpu /></el-icon><span>收益回测与AI</span></el-menu-item>
                     <el-menu-item index="4" @click="go('/api/trade/history/')"><el-icon><List /></el-icon><span>模拟交易流水</span></el-menu-item>
                 </el-menu>
             </el-aside>
             <el-container>
-                <el-header class="main-header">
-                    <h3>{% block title %}首页{% endblock %}</h3>
+                <el-header class="header">
+                    <h3>{% block title %}{% endblock %}</h3>
+                    <div @click="showMsg" style="cursor: pointer; position: relative;">
+                        <el-icon size="20"><Bell /></el-icon>
+                        <el-badge v-if="msgCount > 0" :value="msgCount" style="position: absolute; top: -5px; right: -5px;" />
+                    </div>
                 </el-header>
-                <el-main>
-                    {% block content %}{% endblock %}
-                </el-main>
+                <el-main>{% block content %}{% endblock %}</el-main>
             </el-container>
         </el-container>
     </div>
     <script>
-        const { createApp, ref, onMounted, computed } = Vue;
+        const { createApp, ref, onMounted } = Vue;
         const app = createApp({
             delimiters: ['[[', ']]'],
             setup() {
                 const activeMenu = ref('1');
+                const msgCount = ref(0);
                 const go = (url) => window.location.href = url;
-                // 子页面逻辑挂载点
-                return { activeMenu, go, ...(typeof pageSetup === 'function' ? pageSetup() : {}) };
+
+                // 模拟轮询消息推送
+                setInterval(async () => {
+                    try {
+                        const res = await axios.get('/api/message/check/');
+                        if (res.data.data.length > 0) {
+                            msgCount.value = res.data.data.length;
+                            ElementPlus.ElNotification({
+                                title: '新策略信号',
+                                message: res.data.data[0].content,
+                                type: 'success',
+                                duration: 5000
+                            });
+                        }
+                    } catch(e){}
+                }, 10000); // 10秒查一次
+
+                const showMsg = () => ElementPlus.ElMessage.info('请前往分析页面查看详情');
+                return { activeMenu, go, msgCount, showMsg, ...(typeof pageSetup === 'function' ? pageSetup() : {}) };
             }
         });
         app.use(ElementPlus);

@@ -2,27 +2,24 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # 1. 图形管理 (Pattern Lab)
-    path('pattern/manage/', views.page_pattern_manage, name='page_pattern_manage'),
+    # 1. 图形管理
+    path('pattern/manage/', views.page_pattern_manage, name='page_pattern'),
     path('pattern/list/', views.api_pattern_list, name='api_pattern_list'),
     path('pattern/save/', views.api_pattern_save, name='api_pattern_save'),
 
-    # 2. 图形分析 (Analysis)
+    # 2. 市场分析
     path('analysis/', views.page_analysis, name='page_analysis'),
     path('analysis/run/', views.api_run_analysis, name='api_run_analysis'),
-    path('favorite/toggle/', views.api_toggle_favorite, name='api_toggle_favorite'),
-    path('favorite/list/', views.api_get_favorites, name='api_get_favorites'),
+    path('stock/detail/', views.api_stock_detail, name='api_stock_detail'), # 详情页数据
 
-    # 3. 收益分析 (Prediction & Backtest)
-    path('prediction/', views.page_prediction, name='page_prediction'),
-    path('prediction/run/', views.api_run_prediction, name='api_run_prediction'),
-    path('backtest/run/', views.api_run_backtest, name='api_run_backtest'),
-
-    # 4. 交易记录
-    path('trade/history/', views.page_trade_history, name='page_trade_history'),
-    path('trade/data/', views.api_trade_data, name='api_trade_data'),
+    # 3. 收藏与交易
+    path('favorite/add/', views.api_fav_add, name='api_fav_add'),
+    path('favorite/list/', views.api_fav_list, name='api_fav_list'),
     path('trade/order/', views.api_place_order, name='api_place_order'),
+    path('trade/history/', views.page_trade_history, name='page_trade'),
+    path('trade/data/', views.api_trade_data, name='api_trade_data'),
 
-    # 5. 通用数据
-    path('kline/', views.api_get_kline, name='api_get_kline'),
+    # 4. 预测与消息
+    path('prediction/', views.page_prediction, name='page_prediction'),
+    path('message/check/', views.api_check_messages, name='api_check_messages'), # 轮询消息
 ]
