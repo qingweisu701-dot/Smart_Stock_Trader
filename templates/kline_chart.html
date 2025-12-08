@@ -12,9 +12,9 @@
         .el-header { background-color: #fff; box-shadow: 0 1px 4px rgba(0,21,41,.08); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
         .main-card { margin-bottom: 20px; border-radius: 4px; }
         .chart-container { height: 600px; width: 100%; }
+        .compare-chart-container { height: 400px; width: 100%; } /* 对比图高度 */
         .drawing-cursor { cursor: crosshair !important; }
         .result-section { margin-top: 20px; border-top: 5px solid #409EFF; }
-        .input-table .el-input__inner { padding: 0 5px; text-align: center; }
         .strategy-tag { margin-right: 10px; margin-bottom: 5px; cursor: pointer; }
     </style>
 </head>
@@ -54,16 +54,14 @@
                             <el-col :span="19">
                                 <el-button type="primary" @click="fetchData" :loading="loading" plain>查询K线</el-button>
                                 <el-divider direction="vertical"></el-divider>
-
                                 <el-button :type="isDrawing ? 'danger' : 'warning'" icon="Edit" @click="toggleDrawing">
                                     [[ isDrawing ? '停止绘制' : '手绘形态' ]]
                                 </el-button>
-                                <el-button type="primary" icon="Grid" @click="openTableDialog" plain>表格定义</el-button>
                                 <el-button type="info" icon="Delete" @click="clearCanvas" circle plain style="margin-left: 10px"></el-button>
                             </el-col>
                         </el-row>
 
-                       <el-row :gutter="10" align="middle" style="background: #f9fafc; padding: 15px; border-radius: 4px;">
+                        <el-row :gutter="10" align="middle" style="background: #f9fafc; padding: 15px; border-radius: 4px;">
                             <el-col :span="2" style="text-align: right; color: #666; font-size: 14px; font-weight: bold;">
                                 🎯 基础筛选:
                             </el-col>
@@ -80,40 +78,34 @@
                                 </el-select>
                             </el-col>
 
-                            <el-col :span="5">
+                            <el-col :span="3">
+                                <el-select v-model="filters.marketCap" placeholder="市值规模" clearable size="small">
+                                    <el-option label="小盘股 (<100亿)" value="SMALL"></el-option>
+                                    <el-option label="中盘股 (100-500亿)" value="MID"></el-option>
+                                    <el-option label="大盘股 (>500亿)" value="LARGE"></el-option>
+                                </el-select>
+                            </el-col>
+
+                            <el-col :span="4">
                                 <div style="display: flex; align-items: center;">
-                                    <el-input v-model="filters.minPrice" placeholder="最低价" size="small" style="width: 70px"></el-input>
-                                    <span style="margin: 0 5px; color:#ccc">-</span>
-                                    <el-input v-model="filters.maxPrice" placeholder="最高价" size="small" style="width: 70px"></el-input>
+                                    <el-input v-model="filters.minPrice" placeholder="最低价" size="small" style="width: 48%"></el-input>
+                                    <span style="margin: 0 3px; color:#ccc">-</span>
+                                    <el-input v-model="filters.maxPrice" placeholder="最高价" size="small" style="width: 48%"></el-input>
                                 </div>
                             </el-col>
 
-                            <el-col :span="6">
-                                <el-button type="warning" icon="Setting" plain size="small" style="width: 100%" @click="strategyDialogVisible = true">
-                                    配置指标策略
-                                    <span v-if="selectedStrategies.length > 0" style="margin-left: 5px; font-weight: bold">
-                                        ([[ selectedStrategies.length ]])
-                                    </span>
-                                </el-button>
+                            <el-col :span="5" style="padding: 0 10px;">
+                                <div style="display: flex; align-items: center;">
+                                    <span style="font-size: 12px; color: #909399; margin-right: 5px; white-space: nowrap;">阈值: [[ filters.minScore ]]</span>
+                                    <el-slider v-model="filters.minScore" :min="0" :max="90" size="small" style="flex: 1;"></el-slider>
+                                </div>
                             </el-col>
 
-                            <el-col :span="5" style="text-align: right;">
-                                <el-button type="success" icon="Cpu" size="default" @click="submitPattern" style="width: 100%">
-                                    开始匹配
-                                </el-button>
+                            <el-col :span="4" style="text-align: right;">
+                                <el-button type="warning" icon="Setting" circle plain size="small" @click="strategyDialogVisible = true" title="配置策略"></el-button>
+                                <el-button type="success" icon="Cpu" size="small" @click="submitPattern">筛选</el-button>
                             </el-col>
                         </el-row>
-
-                        <div v-if="selectedStrategies.length > 0" style="margin-top: 10px; padding-left: 20px;">
-                            <span style="font-size: 13px; color: #666; margin-right: 10px;">当前组合 ([[ strategyLogic === 'AND' ? '且' : '或' ]]): </span>
-                            <el-tag v-for="tag in selectedStrategies" :key="tag" size="small" class="strategy-tag" effect="dark" type="warning">
-                                [[ getStrategyLabel(tag) ]]
-                            </el-tag>
-                        </div>
-
-                        <div style="margin-top: 5px; text-align: right;">
-                             <span style="margin-left: 15px; color: #909399; font-size: 13px;">[[ statusText ]]</span>
-                        </div>
                     </el-card>
 
                     <el-card class="main-card" shadow="always" body-style="padding: 0px;">
@@ -123,88 +115,94 @@
                     <el-card v-if="matchResult.length > 0" class="main-card result-section">
                         <template #header>
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: bold; font-size: 16px;">🎯 匹配结果 Top 5</span>
+                                <span style="font-weight: bold; font-size: 16px;">🎯 匹配结果 Top 10</span>
                                 <el-tag type="success">计算完成</el-tag>
                             </div>
                         </template>
 
                         <el-table :data="matchResult" stripe style="width: 100%" border>
-                            <el-table-column prop="code" label="代码" width="100">
-                                <template #default="scope"><el-tag effect="dark">[[ scope.row.code ]]</el-tag></template>
-                            </el-table-column>
-                            <el-table-column prop="trigger" label="触发策略" width="180">
+                           <el-table-column label="股票信息" width="140">
                                 <template #default="scope">
-                                    <el-tag :type="scope.row.trigger !== '不满足策略' ? 'danger' : 'info'" effect="plain">
+                                    <div style="font-weight: bold; font-size: 14px;">[[ scope.row.name ]]</div>
+                                    <el-tag size="small" effect="plain" type="info">[[ scope.row.code ]]</el-tag>
+                                </template>
+                            </el-table-column>
+
+                            <el-table-column label="得分详情" width="180">
+                                <template #default="scope">
+                                    <el-tooltip content="形态分 + 策略分" placement="top">
+                                        <div style="font-size: 12px;">
+                                            <span style="color: #E6A23C">形态: [[ scope.row.score_breakdown.dtw ]]</span> |
+                                            <span style="color: #67C23A">策略: [[ scope.row.score_breakdown.strategy ]]</span>
+                                        </div>
+                                    </el-tooltip>
+                                    <el-progress :percentage="scope.row.score > 100 ? 100 : scope.row.score" :color="customColors" :stroke-width="6"></el-progress>
+                                </template>
+                            </el-table-column>
+
+                            <el-table-column prop="trigger" label="触发策略" width="160">
+                                <template #default="scope">
+                                    <el-tag :type="scope.row.trigger !== '不满足策略' ? 'danger' : 'info'" effect="plain" size="small">
                                         [[ scope.row.trigger ]]
                                     </el-tag>
                                 </template>
                             </el-table-column>
-                            <el-table-column prop="score" label="综合得分" width="120" sortable>
+
+                            <el-table-column prop="match_range" label="匹配时间段" width="200" show-overflow-tooltip>
                                 <template #default="scope">
-                                    <span style="font-weight: bold; color: #F56C6C">[[ scope.row.score ]]</span>
+                                    <i class="el-icon-time"></i> [[ scope.row.match_range ]]
                                 </template>
                             </el-table-column>
-                            <el-table-column prop="price" label="当前价">
+
+                            <el-table-column prop="price" label="当前价" width="100">
                                 <template #default="scope">¥ [[ scope.row.price ]]</template>
                             </el-table-column>
-                            <el-table-column label="操作" width="220">
+
+                            <el-table-column label="操作">
                                 <template #default="scope">
-                                    <el-button size="small" @click="stockCode = scope.row.code; fetchData()">详情</el-button>
+                                    <el-button size="small" type="warning" plain icon="DataLine" @click="showCompareDialog(scope.row)">对比</el-button>
                                     <el-button size="small" type="primary" @click="handleTrade(scope.row)">模拟交易</el-button>
                                 </template>
                             </el-table-column>
                         </el-table>
                     </el-card>
+
+                    <el-card v-if="hasSearched && matchResult.length === 0" class="main-card" style="text-align: center; padding: 40px 0;">
+                        <el-empty description="暂无匹配结果">
+                            <template #description>
+                                <p>当前筛选条件下未找到相似股票</p>
+                                <p style="font-size: 12px; color: #999;">建议：降低匹配阈值 / 清除代码筛选 / 简化手绘形态</p>
+                            </template>
+                        </el-empty>
+                    </el-card>
                 </el-main>
             </el-container>
 
-            <el-dialog v-model="tableDialogVisible" title="通过数据定义 K 线组合图形" width="60%">
-                <div style="margin-bottom: 10px">
-                    <el-button size="small" type="primary" @click="addTableRow" plain>+ 新增一行</el-button>
-                </div>
-                <el-table :data="inputTableData" border style="width: 100%" max-height="300" size="small" class="input-table">
-                    <el-table-column label="日期" width="140"><template #default="scope"><el-input v-model="scope.row.date" placeholder="YYYY-MM-DD"></el-input></template></el-table-column>
-                    <el-table-column label="收盘价 (关键)"><template #default="scope"><el-input v-model="scope.row.close" type="number" style="font-weight: bold; color: #409EFF"></el-input></template></el-table-column>
-                    <el-table-column label="操作" width="60"><template #default="scope"><el-button type="danger" icon="Delete" circle size="small" @click="deleteRow(scope.$index)"></el-button></template></el-table-column>
-                </el-table>
-                <template #footer>
-                    <span class="dialog-footer">
-                        <el-button @click="tableDialogVisible = false">取消</el-button>
-                        <el-button type="primary" @click="generateFromTable">生成并匹配</el-button>
-                    </span>
-                </template>
-            </el-dialog>
-
             <el-dialog v-model="strategyDialogVisible" title="构建多因子策略组合" width="40%">
-                <p style="margin-bottom: 15px; color: #666; font-size: 14px;">请勾选需要结合的技术指标条件：</p>
-
                 <el-checkbox-group v-model="selectedStrategies">
                     <div style="margin-bottom: 10px; font-weight: bold;">趋势类：</div>
-                    <el-checkbox label="MACD_GOLD">MACD 金叉 (趋势启动)</el-checkbox>
-                    <el-checkbox label="MACD_DEAD">MACD 死叉 (趋势结束)</el-checkbox>
-                    <el-checkbox label="MA_LONG">均线多头排列 (&gt;MA5&gt;MA20)</el-checkbox>
-                    <el-checkbox label="MA_SHORT">均线空头排列 (&lt;MA5&lt;MA20)</el-checkbox>
-
+                    <el-checkbox label="MACD_GOLD">MACD 金叉</el-checkbox>
+                    <el-checkbox label="MA_LONG">均线多头排列</el-checkbox>
                     <div style="margin: 15px 0 10px; font-weight: bold;">震荡类：</div>
-                    <el-checkbox label="RSI_LOW">RSI 超卖 (&lt;30 抄底)</el-checkbox>
-                    <el-checkbox label="RSI_HIGH">RSI 超买 (&gt;70 逃顶)</el-checkbox>
+                    <el-checkbox label="RSI_LOW">RSI 超卖 (<30)</el-checkbox>
                 </el-checkbox-group>
-
                 <el-divider></el-divider>
-
                 <div style="display: flex; align-items: center;">
-                    <span style="margin-right: 15px; font-weight: bold;">组合逻辑关系：</span>
+                    <span style="margin-right: 15px; font-weight: bold;">组合逻辑：</span>
                     <el-radio-group v-model="strategyLogic">
-                        <el-radio label="AND">满足所有条件 (AND)</el-radio>
-                        <el-radio label="OR">满足任一条件 (OR)</el-radio>
+                        <el-radio label="AND">且 (AND)</el-radio>
+                        <el-radio label="OR">或 (OR)</el-radio>
                     </el-radio-group>
                 </div>
+            </el-dialog>
 
-                <template #footer>
-                    <span class="dialog-footer">
-                        <el-button @click="strategyDialogVisible = false">完成配置</el-button>
-                    </span>
-                </template>
+            <el-dialog v-model="compareDialogVisible" title="走势详细对比 (归一化)" width="60%" @opened="renderCompareChart">
+                <div style="margin-bottom: 10px; font-size: 13px; color: #666; display: flex; justify-content: space-between;">
+                    <span>股票代码: <b>[[ currentCompareRow.code ]]</b></span>
+                    <span>匹配度得分: <b style="color: #F56C6C">[[ currentCompareRow.score ]]</b></span>
+                    <span>匹配时段: [[ currentCompareRow.match_range ]]</span>
+                </div>
+                <div id="compare-chart" class="compare-chart-container"></div>
             </el-dialog>
 
         </el-container>
@@ -222,133 +220,135 @@
         const app = createApp({
             delimiters: ['[[', ']]'],
             setup() {
-                // 1. 变量定义
                 const stockCode = ref('000001');
                 const loading = ref(false);
                 const isDrawing = ref(false);
-                const statusText = ref('就绪');
                 const matchResult = ref([]);
-                const tradeMode = ref('BUY');
                 const hasSearched = ref(false);
+                const tradeMode = ref('BUY');
                 const filters = ref({
-                    codeQuery: '',
-                    sector: '',
-                    minPrice: '',
-                    maxPrice: '',
-                    marketCap: ''
+                    codeQuery: '', sector: '', minPrice: '', maxPrice: '',
+                    minScore: 60 // 默认阈值
                 });
-                // 弹窗变量
-                const tableDialogVisible = ref(false);
-                const inputTableData = ref([
-                     { date: '2023-01-01', close: 10.2 }, { date: '2023-01-02', close: 10.4 },
-                     { date: '2023-01-03', close: 10.1 }, { date: '2023-01-04', close: 9.6 },
-                     { date: '2023-01-05', close: 9.8 }
-                ]);
 
-                // 策略变量
                 const strategyDialogVisible = ref(false);
                 const selectedStrategies = ref([]);
                 const strategyLogic = ref('OR');
+
+                // 对比弹窗相关
+                const compareDialogVisible = ref(false);
+                const currentCompareRow = ref({});
+                let compareChart = null;
 
                 let myChart = null;
                 let drawingSeriesData = [];
                 let isMouseDown = false;
 
-                const strategyLabels = {
-                    'MACD_GOLD': 'MACD金叉', 'MACD_DEAD': 'MACD死叉',
-                    'MA_LONG': '均线多头', 'MA_SHORT': '均线空头',
-                    'RSI_LOW': 'RSI超卖', 'RSI_HIGH': 'RSI超买'
-                };
-                const getStrategyLabel = (tag) => strategyLabels[tag] || tag;
+                const customColors = [
+                    { color: '#f56c6c', percentage: 20 },
+                    { color: '#e6a23c', percentage: 60 },
+                    { color: '#67c23a', percentage: 100 }
+                ];
 
-                // 2. 初始化图表
+                // 归一化函数
+                const normalizeData = (data) => {
+                    if (!data || data.length === 0) return [];
+                    const mean = data.reduce((a, b) => a + b, 0) / data.length;
+                    const std = Math.sqrt(data.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b, 0) / data.length);
+                    if (std === 0) return data.map(() => 0);
+                    return data.map(x => (x - mean) / std);
+                };
+
+                // 显示对比弹窗
+                const showCompareDialog = (row) => {
+                    currentCompareRow.value = row;
+                    compareDialogVisible.value = true;
+                };
+
+                const renderCompareChart = () => {
+                    const dom = document.getElementById('compare-chart');
+                    if (compareChart) compareChart.dispose();
+                    compareChart = echarts.init(dom);
+
+                    let userPattern = drawingSeriesData.map(d => d[1]);
+                    let stockPattern = currentCompareRow.value.match_data || [];
+                    if (userPattern.length === 0) userPattern = new Array(stockPattern.length).fill(stockPattern[0]);
+
+                    const normUser = normalizeData(userPattern);
+                    const normStock = normalizeData(stockPattern);
+                    const xData = Array.from({length: Math.max(normUser.length, normStock.length)}, (_, i) => i + 1);
+
+                    const option = {
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: ['我的预期(归一化)', '实际走势(归一化)'], bottom: 0 },
+                        grid: { top: 30, left: 40, right: 40, bottom: 40 },
+                        xAxis: { type: 'category', data: xData, boundaryGap: false },
+                        yAxis: { type: 'value', splitLine: { show: false } },
+                        series: [
+                            {
+                                name: '我的预期(归一化)', type: 'line', data: normUser,
+                                smooth: true, lineStyle: { type: 'dashed', width: 2, color: '#E6A23C' }, showSymbol: false
+                            },
+                            {
+                                name: '实际走势(归一化)', type: 'line', data: normStock,
+                                smooth: true, lineStyle: { width: 3, color: '#409EFF' },
+                                areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(64,158,255,0.3)'}, {offset: 1, color: 'rgba(64,158,255,0.05)'}]) }
+                            }
+                        ]
+                    };
+                    compareChart.setOption(option);
+                };
+
                 const initChart = () => {
                     const chartDom = document.getElementById('main-chart');
                     if (!chartDom) return;
                     myChart = echarts.init(chartDom);
                     const zr = myChart.getZr();
-
-                    zr.on('mousedown', () => {
-                        if (!isDrawing.value) return;
-                        isMouseDown = true;
-                        myChart.setOption({ tooltip: { show: false } });
-                        drawingSeriesData = [];
-                        statusText.value = '正在绘制...';
-                    });
+                    zr.on('mousedown', () => { if(!isDrawing.value) return; isMouseDown=true; drawingSeriesData=[]; });
                     zr.on('mousemove', params => {
                         if (!isDrawing.value || !isMouseDown) return;
                         const pt = myChart.convertFromPixel({ seriesIndex: 0 }, [params.offsetX, params.offsetY]);
-                        if (pt) {
-                            drawingSeriesData.push(pt);
-                            updateDrawingLine(drawingSeriesData);
-                        }
+                        if (pt) { drawingSeriesData.push(pt); updateDrawingLine(drawingSeriesData); }
                     });
-                    zr.on('mouseup', () => {
-                        if (isDrawing.value && isMouseDown) {
-                             isMouseDown = false;
-                             myChart.setOption({ tooltip: { show: true } });
-                             statusText.value = '绘制完成';
-                        }
-                    });
+                    zr.on('mouseup', () => { if(isDrawing.value) isMouseDown=false; });
                     zr.on('globalout', () => isMouseDown = false);
                     window.onresize = () => myChart.resize();
                 };
 
                 const updateDrawingLine = (data) => {
-                    myChart.setOption({
-                        series: [{
-                            id: 'user-drawing-line',
-                            type: 'line', smooth: 0.3, symbol: 'none',
-                            lineStyle: { color: '#E6A23C', width: 4, type: 'solid' },
-                            z: 9999, xAxisIndex: 0, yAxisIndex: 0, data: data
-                        }]
-                    }, { lazyUpdate: false });
+                    myChart.setOption({ series: [{ id: 'user-drawing-line', data: data }] }, { lazyUpdate: false });
                 };
 
-                // 3. 渲染图表
+                // 🔥 渲染主图 (包含你要求的中文 Tooltip 和涨跌幅)
                 const renderChart = (dates, values, mas, volumes) => {
                     mas = mas || { MA5:[], MA10:[], MA20:[] };
                     volumes = volumes || [];
                     const option = {
                         backgroundColor: '#fff', animation: false,
+                        // ✅ 中文汉化 + 涨跌幅显示
                         tooltip: {
                             trigger: 'axis',
                             axisPointer: { type: 'cross' },
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)', // 背景稍微透明一点
-                            borderColor: '#ccc',
-                            borderWidth: 1,
-                            textStyle: { color: '#333' }, // 强制文字颜色
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            borderColor: '#ccc', borderWidth: 1, textStyle: { color: '#333' },
                             formatter: function (params) {
                                 let result = '';
                                 if (!params || params.length === 0) return '';
-
-                                // 1. 显示日期 (取第一个数据的轴标签)
-                                result += `<div style="font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 3px;">${params[0].axisValue}</div>`;
-
+                                result += `<div style="font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #eee;">${params[0].axisValue}</div>`;
                                 params.forEach(function (item) {
-                                    // === K线数据 (SeriesType: candlestick) ===
                                     if (item.seriesType === 'candlestick') {
-                                        // item.value 在 ECharts 中通常是 [index, open, close, lowest, highest, ...]
-                                        // 我们的数据源顺序是 df[['open', 'close', 'low', 'high', 'vol']]
-                                        // 映射后：value[1]=开盘, value[2]=收盘, value[3]=最低, value[4]=最高
                                         const open = item.value[1];
                                         const close = item.value[2];
                                         const low = item.value[3];
                                         const high = item.value[4];
-
-                                        // 计算涨跌幅 (为了显示好看)
                                         let change = 0;
-                                        if (open !== 0) {
-                                            change = (close - open) / open * 100;
-                                        }
-                                        const color = change >= 0 ? '#F56C6C' : '#00C853'; // 红涨绿跌
+                                        if (open !== 0) change = (close - open) / open * 100;
+                                        const color = change >= 0 ? '#F56C6C' : '#00C853';
                                         const sign = change >= 0 ? '+' : '';
-
-                                        // 拼凑中文 HTML
                                         result += `
                                             <div style="margin-bottom: 5px;">
-                                                <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${item.color};"></span>
-                                                <span style="font-weight: bold;">${item.seriesName}</span>
+                                                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:${item.color};margin-right:5px;"></span>
+                                                <span style="font-weight:bold;">${item.seriesName}</span>
                                             </div>
                                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px; font-family: monospace; color: #666; margin-bottom: 8px;">
                                                 <span>开盘: <b style="color:#333">${open}</b></span>
@@ -360,86 +360,44 @@
                                                 </span>
                                             </div>
                                         `;
-                                    }
-                                    // === 成交量 (SeriesName: '成交量') ===
-                                    else if (item.seriesName === '成交量') {
-                                        // item.value: [index, vol, sign]
-                                        const vol = item.value[1];
-                                        result += `
-                                            <div style="display: flex; justify-content: space-between; font-size: 12px;">
-                                                <span>
-                                                    <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${item.color};"></span>
-                                                    ${item.seriesName}
-                                                </span>
-                                                <b>${vol} 手</b>
-                                            </div>
-                                        `;
-                                    }
-                                    // === 均线等其他线条 ===
-                                    else {
-                                        if (item.value !== undefined) {
-                                            result += `
-                                                <div style="display: flex; justify-content: space-between; font-size: 12px;">
-                                                    <span>
-                                                        <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${item.color};"></span>
-                                                        ${item.seriesName}
-                                                    </span>
-                                                    <span>${parseFloat(item.value).toFixed(2)}</span>
-                                                </div>
-                                            `;
-                                        }
+                                    } else if (item.seriesName === '成交量') {
+                                        result += `<div style="display:flex;justify-content:space-between;font-size:12px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:${item.color};margin-right:5px;"></span>${item.seriesName}</span><b>${item.value[1]} 手</b></div>`;
+                                    } else if (item.value !== undefined) {
+                                        result += `<div style="display:flex;justify-content:space-between;font-size:12px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:${item.color};margin-right:5px;"></span>${item.seriesName}</span><span>${parseFloat(item.value).toFixed(2)}</span></div>`;
                                     }
                                 });
                                 return result;
                             }
                         },
-                        axisPointer: { link: { xAxisIndex: 'all' } },
                         legend: { data: ['日K', 'MA5', 'MA10', 'MA20', '成交量', '预期形态'], top: 10 },
                         grid: [{ left: '5%', right: '5%', height: '60%', top: '10%' }, { left: '5%', right: '5%', top: '75%', height: '15%' }],
-                        xAxis: [
-                            { type: 'category', data: dates, scale: true, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax', gridIndex: 0 },
-                            { type: 'category', gridIndex: 1, data: dates, scale: true, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' }
-                        ],
-                        yAxis: [
-                            { scale: true, splitLine: { show: true, lineStyle: { color: '#eee' } }, gridIndex: 0 },
-                            { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-                        ],
+                        xAxis: [{ type: 'category', data: dates, scale: true, boundaryGap: false }, { type: 'category', gridIndex: 1, data: dates }],
+                        yAxis: [{ scale: true, splitLine: { show: true } }, { scale: true, gridIndex: 1, splitLine: { show: false } }],
                         dataZoom: [{ type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 }, { type: 'slider', xAxisIndex: [0, 1], bottom: 0, start: 50, end: 100 }],
                         series: [
-                            { name: '日K', type: 'candlestick', data: values, xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: '#F56C6C', color0: '#00C853', borderColor: '#F56C6C', borderColor0: '#00C853' } },
-                            { name: 'MA5', type: 'line', data: mas.MA5, smooth: true, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, lineStyle: { width: 1, color: '#f6bd16' } },
-                            { name: 'MA10', type: 'line', data: mas.MA10, smooth: true, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, lineStyle: { width: 1, color: '#5b8ff9' } },
-                            { name: 'MA20', type: 'line', data: mas.MA20, smooth: true, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, lineStyle: { width: 1, color: '#9d58f9' } },
-                            { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes, itemStyle: { color: (params) => params.value[2] === 1 ? '#F56C6C' : '#00C853' } },
-                            { id: 'user-drawing-line', name: '预期形态', type: 'line', xAxisIndex: 0, yAxisIndex: 0, smooth: 0.3, symbol: 'none', lineStyle: { color: '#E6A23C', width: 4, type: 'solid' }, data: [], z: 9999 }
+                            { name: '日K', type: 'candlestick', data: values, itemStyle: { color: '#F56C6C', color0: '#00C853', borderColor: '#F56C6C', borderColor0: '#00C853' } },
+                            { name: 'MA5', type: 'line', data: mas.MA5, smooth: true, showSymbol: false, lineStyle: { width: 1 } },
+                            { name: 'MA10', type: 'line', data: mas.MA10, smooth: true, showSymbol: false, lineStyle: { width: 1 } },
+                            { name: 'MA20', type: 'line', data: mas.MA20, smooth: true, showSymbol: false, lineStyle: { width: 1 } },
+                            { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes },
+                            { id: 'user-drawing-line', name: '预期形态', type: 'line', smooth: 0.3, symbol: 'none', lineStyle: { color: '#E6A23C', width: 4 }, data: [] }
                         ]
                     };
                     myChart.setOption(option, true);
                 };
 
-                // 4. 功能逻辑
-                const toggleDrawing = () => {
-                    isDrawing.value = !isDrawing.value;
-                    statusText.value = isDrawing.value ? '请按住鼠标左键绘图' : '仅浏览';
-                    isMouseDown = false;
-                    if (isDrawing.value) {
-                        myChart.setOption({ dataZoom: [{ type: 'inside', disabled: true }, { type: 'slider', show: true }] });
-                        drawingSeriesData = [];
-                        updateDrawingLine([]);
-                    } else {
-                        myChart.setOption({ dataZoom: [{ type: 'inside', disabled: false }, { type: 'slider', show: true }] });
-                    }
-                };
-
                 const submitPattern = async () => {
-                    if (drawingSeriesData.length < 5) { ElementPlus.ElMessage.warning('请先绘制形态'); return; }
-                    const loadingInst = ElementPlus.ElLoading.service({ text: '正在多因子筛选与匹配...', background: 'rgba(255,255,255,0.8)' });
+                    const hasCode = filters.value.codeQuery && filters.value.codeQuery.length > 0;
+                    const hasStrategy = selectedStrategies.value.length > 0;
+                    const hasPattern = drawingSeriesData.length >= 3;
+                    const hasSector = filters.value.sector;
 
-                    const finalFilters = {
-                        ...filters.value,
-                        strategies: selectedStrategies.value,
-                        logic: strategyLogic.value
-                    };
+                    if (!hasCode && !hasStrategy && !hasPattern && !hasSector) {
+                        ElementPlus.ElMessage.warning('请至少提供一个筛选条件 (手绘/代码/策略/行业)'); return;
+                    }
+
+                    const loadingInst = ElementPlus.ElLoading.service({ text: '智能匹配计算中...', background: 'rgba(255,255,255,0.8)' });
+                    const finalFilters = { ...filters.value, strategies: selectedStrategies.value, logic: strategyLogic.value };
 
                     try {
                         const res = await axios.post('/api/match/', {
@@ -447,12 +405,16 @@
                             mode: tradeMode.value,
                             filters: finalFilters
                         });
+                        hasSearched.value = true;
                         if (res.data.code === 200) {
                             matchResult.value = res.data.data;
-                            ElementPlus.ElMessage.success(`匹配完成`);
-                            setTimeout(() => document.querySelector('.result-section')?.scrollIntoView({ behavior: 'smooth' }), 300);
-                        } else { ElementPlus.ElMessage.warning(res.data.msg); }
-                    } catch (e) { ElementPlus.ElMessage.error('系统错误'); }
+                            if (matchResult.value.length === 0) ElementPlus.ElMessage.warning('未找到符合条件的股票 (尝试降低匹配阈值)');
+                            else {
+                                ElementPlus.ElMessage.success(`找到 ${matchResult.value.length} 个结果`);
+                                setTimeout(() => document.querySelector('.result-section')?.scrollIntoView({ behavior: 'smooth' }), 300);
+                            }
+                        } else ElementPlus.ElMessage.warning(res.data.msg);
+                    } catch (e) { ElementPlus.ElMessage.error('系统错误'); console.error(e); }
                     finally { loadingInst.close(); }
                 };
 
@@ -460,75 +422,33 @@
                     loading.value = true;
                     try {
                         const res = await axios.get(`/api/kline/?code=${stockCode.value}`);
-                        if (res.data.code === 200) {
-                            const d = res.data.data;
-                            renderChart(d.dates, d.values, d.mas, d.volumes);
-                        } else { ElementPlus.ElMessage.error(res.data.msg); }
-                    } catch (e) { ElementPlus.ElMessage.error('请求失败'); }
-                    finally { loading.value = false; }
+                        if (res.data.code === 200) renderChart(res.data.data.dates, res.data.data.values, res.data.data.mas, res.data.data.volumes);
+                        else ElementPlus.ElMessage.error(res.data.msg);
+                    } catch (e) { ElementPlus.ElMessage.error('请求失败'); } finally { loading.value = false; }
                 };
 
-                const openTableDialog = () => tableDialogVisible.value = true;
-                const addTableRow = () => inputTableData.value.push({ date: '', close: '' });
-                const deleteRow = (index) => inputTableData.value.splice(index, 1);
-                const generateFromTable = () => {
-                    const newData = inputTableData.value.map((row, index) => [index, parseFloat(row.close || 0)]);
-                    if (newData.length < 3) return;
-                    drawingSeriesData = newData;
-                    updateDrawingLine(drawingSeriesData);
-                    tableDialogVisible.value = false;
-                    submitPattern();
-                };
-
-                const clearCanvas = () => { drawingSeriesData = []; updateDrawingLine([]); matchResult.value = []; };
                 const handleTrade = (row) => {
-                    ElementPlus.ElMessageBox.confirm(
-                        `确定要以 ¥${row.price} 的价格买入 ${row.code} (100股) 吗？\n触发策略：${row.trigger}`,
-                        '模拟交易确认',
-                        {
-                            confirmButtonText: '确认买入',
-                            cancelButtonText: '取消',
-                            type: 'warning',
-                        }
-                    ).then(async () => {
-                        try {
-                            // 调用后端下单接口
-                            const res = await axios.post('/api/order/', {
-                                code: row.code,
-                                date: row.date,
-                                type: 'BUY',       // 默认为买入
-                                price: row.price,
-                                volume: 100,       // 默认买入 1 手
-                                trigger: row.trigger
-                            });
-
-                            if (res.data.code === 200) {
-                                ElementPlus.ElMessage.success('交易成功！已存入历史记录');
-                            } else {
-                                ElementPlus.ElMessage.error('交易失败: ' + res.data.msg);
-                            }
-                        } catch (e) {
-                            ElementPlus.ElMessage.error('网络请求错误');
-                            console.error(e);
-                        }
-                    }).catch(() => {
-                        ElementPlus.ElMessage.info('已取消交易');
+                    ElementPlus.ElMessageBox.confirm(`以 ¥${row.price} 买入 ${row.code} ?`, '交易确认', { type: 'warning' })
+                    .then(async () => {
+                        const res = await axios.post('/api/order/', { code: row.code, date: row.date, type: 'BUY', price: row.price, volume: 100, trigger: row.trigger });
+                        if(res.data.code===200) ElementPlus.ElMessage.success('交易成功');
                     });
                 };
+
                 const goUrl = (url) => window.location.href = url;
+                const toggleDrawing = () => { isDrawing.value = !isDrawing.value; if(!isDrawing.value) drawingSeriesData=[]; updateDrawingLine([]); };
+                const clearCanvas = () => { drawingSeriesData = []; updateDrawingLine([]); matchResult.value = []; };
 
                 onMounted(() => { initChart(); fetchData(); });
 
                 return {
-                    stockCode, loading, isDrawing, statusText, matchResult, tradeMode, filters,
-                    hasSearched,
-                    tableDialogVisible, inputTableData, strategyDialogVisible, selectedStrategies, strategyLogic,
-                    fetchData, toggleDrawing, clearCanvas, submitPattern, handleTrade, goUrl,
-                    openTableDialog, addTableRow, deleteRow, generateFromTable, getStrategyLabel
+                    stockCode, loading, isDrawing, matchResult, hasSearched, filters, customColors,
+                    strategyDialogVisible, selectedStrategies, strategyLogic,
+                    compareDialogVisible, currentCompareRow,
+                    fetchData, toggleDrawing, clearCanvas, submitPattern, handleTrade, goUrl, showCompareDialog, renderCompareChart
                 };
             }
         });
-
         app.use(ElementPlus);
         for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component) }
         app.mount('#app');

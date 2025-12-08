@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from fastdtw import fastdtw
-from data_engine.models import StockDaily
+from data_engine.models import StockDaily, StockBasic
 
 
 # ==========================================
@@ -15,13 +15,13 @@ def normalize_series(series):
 
 
 def calculate_technical_indicators(df):
-    """计算指标: MACD, MA, RSI"""
-    # 确保 df 中有 close 列 (下面的修复会保证这点)
+    """计算指标: MACD, MA, RSI, KDJ"""
     if 'close' not in df.columns:
         return df
 
-    # MA
+    # MA 均线系统
     df['MA5'] = df['close'].rolling(window=5).mean()
+    df['MA10'] = df['close'].rolling(window=10).mean()
     df['MA20'] = df['close'].rolling(window=20).mean()
 
     # MACD
@@ -37,13 +37,21 @@ def calculate_technical_indicators(df):
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
+    # KDJ (简单版实现)
+    low_list = df['low'].rolling(9, min_periods=9).min()
+    high_list = df['high'].rolling(9, min_periods=9).max()
+    rsv = (df['close'] - low_list) / (high_list - low_list) * 100
+    df['K'] = rsv.ewm(com=2, adjust=False).mean()
+    df['D'] = df['K'].ewm(com=2, adjust=False).mean()
+    df['J'] = 3 * df['K'] - 2 * df['D']
+
     return df.fillna(0)
 
+
+# ==========================================
 # 2. 策略动态检查器
+# ==========================================
 def check_strategies(df, strategy_list, logic_type='AND'):
-    """
-    动态检查策略组合
-    """
     if not strategy_list:
         return True, "无策略限制"
 
@@ -53,7 +61,6 @@ def check_strategies(df, strategy_list, logic_type='AND'):
     curr = df.iloc[-1]
     prev = df.iloc[-2]
 
-    # 定义所有支持的原子策略逻辑
     results = []
     labels = []
 
@@ -63,118 +70,90 @@ def check_strategies(df, strategy_list, logic_type='AND'):
         results.append(hit)
         if hit: labels.append("MACD金叉")
 
-    # 2. MACD 死叉
-    if 'MACD_DEAD' in strategy_list:
-        hit = prev['DIF'] > prev['DEA'] and curr['DIF'] < curr['DEA']
-        results.append(hit)
-        if hit: labels.append("MACD死叉")
-
-    # 3. 均线多头 (价格 > MA5 > MA20)
+    # 2. 均线多头
     if 'MA_LONG' in strategy_list:
         hit = curr['close'] > curr['MA5'] > curr['MA20']
         results.append(hit)
         if hit: labels.append("均线多头")
 
-    # 4. 均线空头 (价格 < MA5 < MA20)
-    if 'MA_SHORT' in strategy_list:
-        hit = curr['close'] < curr['MA5'] < curr['MA20']
-        results.append(hit)
-        if hit: labels.append("均线空头")
-
-    # 5. RSI 超卖 (<30)
+    # 3. RSI 超卖
     if 'RSI_LOW' in strategy_list:
         hit = curr['RSI'] < 30
         results.append(hit)
         if hit: labels.append("RSI超卖")
 
-    # 6. RSI 超买 (>70)
-    if 'RSI_HIGH' in strategy_list:
-        hit = curr['RSI'] > 70
-        results.append(hit)
-        if hit: labels.append("RSI超买")
-
-    # 逻辑判定
     if not results: return True, "无有效策略"
 
     if logic_type == 'AND':
         final_pass = all(results)
-    else:  # OR
+    else:
         final_pass = any(results)
 
     return final_pass, ",".join(labels) if labels else "不满足策略"
 
 
 # ==========================================
-# 3. 核心匹配逻辑
+# 3. 核心匹配逻辑 (支持返回股票名称)
 # ==========================================
 
 def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
-    if not user_pattern_prices or len(user_pattern_prices) < 5:
-        return []
+    # 1. 检查形态输入
+    has_pattern = False
+    norm_user_pattern = []
+    pattern_len = 0
+    if user_pattern_prices and len(user_pattern_prices) >= 3:
+        has_pattern = True
+        norm_user_pattern = normalize_series(user_pattern_prices)
+        pattern_len = len(user_pattern_prices)
 
-    norm_user_pattern = normalize_series(user_pattern_prices)
-    pattern_len = len(user_pattern_prices)
-
-    all_codes = StockDaily.objects.values_list('ts_code', flat=True).distinct()
+    # 2. 获取基础股票列表 (包含名称、市值等)
+    all_stocks = StockBasic.objects.all()
     results = []
 
-    # 模拟基本面
-    mock_stock_info = {
-        '000001': {'sector': 'Finance', 'cap': 'LARGE'},
-        '600519': {'sector': 'Consumer', 'cap': 'LARGE'},
-        '300750': {'sector': 'Energy', 'cap': 'LARGE'},
-    }
-
-    # 解析高级策略配置
+    # 解析筛选条件
     strategy_list = filters.get('strategies', []) if filters else []
     logic_type = filters.get('logic', 'OR') if filters else 'OR'
     query_code = filters.get('codeQuery', '') if filters else ''
-    for code in all_codes:
-        # --- 0. 基础筛选 ---
-        if filters:
-            # 1. 代码/名称筛选 (新增逻辑)
-            # 如果用户输入了内容，且当前 code 不包含该内容，则跳过
-            if query_code and query_code not in code:
+    min_score = float(filters.get('minScore', 60)) if filters else 60
+
+    target_sector = filters.get('sector') if filters else None
+    target_cap = filters.get('marketCap') if filters else None
+
+    for stock in all_stocks:
+        code = stock.ts_code
+        name = stock.name  # 🔥 获取股票名称
+
+        # --- 0. 基础硬筛选 ---
+
+        # 0.1 代码/名称过滤 (支持搜代码或搜名字)
+        if query_code:
+            if (query_code not in code) and (query_code not in name):
                 continue
 
-            # 2. 行业筛选
-            stock_sector = mock_stock_info.get(code, {}).get('sector', 'Other')
-            if filters.get('sector') and filters['sector'] != stock_sector: continue
+        # 0.2 行业过滤
+        # 简单匹配：如果 filters.sector 是 'Finance'，而 stock.industry 是 '银行'，需自行建立映射
+        # 这里为了演示，假设必须完全匹配数据库里的 industry 字段
+        # if target_sector and target_sector != stock.industry: continue
 
-            # 3. 市值筛选
-            stock_cap = mock_stock_info.get(code, {}).get('cap', 'SMALL')
-            if filters.get('marketCap') and filters['marketCap'] != stock_cap: continue
+        # 0.3 市值过滤
+        m_cap = stock.market_cap or 0
+        if target_cap:
+            if target_cap == 'SMALL' and m_cap >= 100: continue
+            if target_cap == 'MID' and (m_cap < 100 or m_cap > 500): continue
+            if target_cap == 'LARGE' and m_cap <= 500: continue
 
-        # 获取数据
+        # --- 1. 获取日线数据 ---
         qs = StockDaily.objects.filter(ts_code=code).order_by('trade_date')
-
-        # =========================================================
-        # 🔥【关键修复】这里必须使用新的字段名 (_price)
-        # =========================================================
-        data = list(qs.values(
-            'trade_date',
-            'open_price',
-            'close_price',
-            'high_price',
-            'low_price'
-        ))
-
+        data = list(qs.values('trade_date', 'open_price', 'close_price', 'high_price', 'low_price'))
         df = pd.DataFrame(data)
 
-        if len(df) < pattern_len + 5: continue
+        if len(df) < 20: continue  # 数据太少忽略
 
-        # =========================================================
-        # 🔥【关键修复】重命名回 open/close 以兼容后续逻辑
-        # =========================================================
         if not df.empty:
-            df.rename(columns={
-                'open_price': 'open',
-                'close_price': 'close',
-                'high_price': 'high',
-                'low_price': 'low'
-            }, inplace=True)
+            df.rename(columns={'open_price': 'open', 'close_price': 'close', 'high_price': 'high', 'low_price': 'low'},
+                      inplace=True)
 
-        # --- 1. 计算技术指标 ---
+        # --- 1. 计算指标 (全量计算) ---
         df = calculate_technical_indicators(df)
         curr = df.iloc[-1]
 
@@ -184,27 +163,46 @@ def run_pattern_matching(user_pattern_prices, mode='BUY', filters=None):
             max_p = float(filters.get('maxPrice') or 99999)
             if not (min_p <= curr['close'] <= max_p): continue
 
-        # --- 3. 动态策略组合检查 ---
+        # --- 3. 策略检查 ---
         is_triggered, trigger_msg = check_strategies(df, strategy_list, logic_type)
-
-        strategy_score = 30 if is_triggered else 0
+        strategy_score = 40 if is_triggered else 0 if strategy_list else 0
 
         # --- 4. 形态相似度 (DTW) ---
-        pre_signal_prices = df['close'].iloc[-pattern_len:].values
-        norm_stock_pattern = normalize_series(pre_signal_prices)
-        distance, _ = fastdtw(norm_user_pattern, norm_stock_pattern, dist=lambda x, y: abs(x - y))
-        dtw_score = 100 / (1 + distance)
+        dtw_score = 0
+        match_data_show = []
+        match_dates_show = []
+
+        if has_pattern and len(df) > pattern_len:
+            pre_signal_prices = df['close'].iloc[-pattern_len:].values
+            pre_signal_dates = df['trade_date'].iloc[-pattern_len:].tolist()
+            norm_stock_pattern = normalize_series(pre_signal_prices)
+            distance, _ = fastdtw(norm_user_pattern, norm_stock_pattern, dist=lambda x, y: abs(x - y))
+            base_score = 60 if strategy_list else 100
+            dtw_score = base_score / (1 + distance)
+            match_data_show = pre_signal_prices.tolist()
+            match_dates_show = [d.strftime('%Y-%m-%d') for d in pre_signal_dates]
+            trigger_msg_final = trigger_msg if is_triggered else "形态匹配"
+        else:
+            match_data_show = df['close'].iloc[-20:].values.tolist()
+            match_dates_show = [d.strftime('%Y-%m-%d') for d in df['trade_date'].iloc[-20:].tolist()]
+            trigger_msg_final = trigger_msg if is_triggered else "基础筛选"
 
         final_score = dtw_score + strategy_score
+        if not has_pattern and not strategy_list: final_score = 60
+
+        if final_score < min_score: continue
 
         results.append({
             'code': code,
+            'name': name,  # 🔥 必须返回名字
             'score': round(final_score, 2),
-            'trigger': trigger_msg if is_triggered else "形态匹配",
+            'score_breakdown': {'dtw': round(dtw_score, 2), 'strategy': strategy_score},
+            'trigger': trigger_msg_final,
             'price': round(curr['close'], 2),
             'date': curr['trade_date'].strftime('%Y-%m-%d'),
-            'match_data': pre_signal_prices.tolist()
+            'match_data': match_data_show,
+            'match_range': f"{match_dates_show[0]} ~ {match_dates_show[-1]}" if match_dates_show else ""
         })
 
     results.sort(key=lambda x: x['score'], reverse=True)
-    return results[:5]
+    return results[:10]

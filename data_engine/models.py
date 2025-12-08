@@ -1,5 +1,23 @@
 from django.db import models
 
+class StockBasic(models.Model):
+    """
+    股票基础信息表 (新增：用于存名称、行业、市值)
+    """
+    ts_code = models.CharField(max_length=20, verbose_name='股票代码', primary_key=True)
+    name = models.CharField(max_length=20, verbose_name='股票名称')
+    industry = models.CharField(max_length=20, verbose_name='所属行业', null=True, blank=True)
+    market_cap = models.FloatField(verbose_name='总市值(亿元)', null=True, blank=True)  # 真实市值
+    list_date = models.CharField(max_length=20, verbose_name='上市日期', null=True, blank=True)
+
+    class Meta:
+        verbose_name = '股票列表'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.name} ({self.ts_code})"
+
+
 class StockDaily(models.Model):
     """
     股票日线行情表
@@ -29,9 +47,6 @@ class StockDaily(models.Model):
         return f"{self.ts_code} - {self.trade_date}"
 
 
-# =========================================================
-# 新增的交易记录表
-# =========================================================
 class TradeRecord(models.Model):
     """
     交易记录表
