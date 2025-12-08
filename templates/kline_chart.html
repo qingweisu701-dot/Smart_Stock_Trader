@@ -299,7 +299,88 @@
                     volumes = volumes || [];
                     const option = {
                         backgroundColor: '#fff', animation: false,
-                        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                        tooltip: {
+                            trigger: 'axis',
+                            axisPointer: { type: 'cross' },
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)', // 背景稍微透明一点
+                            borderColor: '#ccc',
+                            borderWidth: 1,
+                            textStyle: { color: '#333' }, // 强制文字颜色
+                            formatter: function (params) {
+                                let result = '';
+                                if (!params || params.length === 0) return '';
+
+                                // 1. 显示日期 (取第一个数据的轴标签)
+                                result += `<div style="font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 3px;">${params[0].axisValue}</div>`;
+
+                                params.forEach(function (item) {
+                                    // === K线数据 (SeriesType: candlestick) ===
+                                    if (item.seriesType === 'candlestick') {
+                                        // item.value 在 ECharts 中通常是 [index, open, close, lowest, highest, ...]
+                                        // 我们的数据源顺序是 df[['open', 'close', 'low', 'high', 'vol']]
+                                        // 映射后：value[1]=开盘, value[2]=收盘, value[3]=最低, value[4]=最高
+                                        const open = item.value[1];
+                                        const close = item.value[2];
+                                        const low = item.value[3];
+                                        const high = item.value[4];
+
+                                        // 计算涨跌幅 (为了显示好看)
+                                        let change = 0;
+                                        if (open !== 0) {
+                                            change = (close - open) / open * 100;
+                                        }
+                                        const color = change >= 0 ? '#F56C6C' : '#00C853'; // 红涨绿跌
+                                        const sign = change >= 0 ? '+' : '';
+
+                                        // 拼凑中文 HTML
+                                        result += `
+                                            <div style="margin-bottom: 5px;">
+                                                <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${item.color};"></span>
+                                                <span style="font-weight: bold;">${item.seriesName}</span>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px; font-family: monospace; color: #666; margin-bottom: 8px;">
+                                                <span>开盘: <b style="color:#333">${open}</b></span>
+                                                <span>收盘: <b style="color:#333">${close}</b></span>
+                                                <span>最高: <b style="color:#333">${high}</b></span>
+                                                <span>最低: <b style="color:#333">${low}</b></span>
+                                                <span style="grid-column: span 2;">
+                                                    涨跌: <span style="color: ${color}; font-weight: bold;">${sign}${change.toFixed(2)}%</span>
+                                                </span>
+                                            </div>
+                                        `;
+                                    }
+                                    // === 成交量 (SeriesName: '成交量') ===
+                                    else if (item.seriesName === '成交量') {
+                                        // item.value: [index, vol, sign]
+                                        const vol = item.value[1];
+                                        result += `
+                                            <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                                                <span>
+                                                    <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${item.color};"></span>
+                                                    ${item.seriesName}
+                                                </span>
+                                                <b>${vol} 手</b>
+                                            </div>
+                                        `;
+                                    }
+                                    // === 均线等其他线条 ===
+                                    else {
+                                        if (item.value !== undefined) {
+                                            result += `
+                                                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                                                    <span>
+                                                        <span style="display:inline-block;margin-right:5px;border-radius:50%;width:10px;height:10px;background-color:${item.color};"></span>
+                                                        ${item.seriesName}
+                                                    </span>
+                                                    <span>${parseFloat(item.value).toFixed(2)}</span>
+                                                </div>
+                                            `;
+                                        }
+                                    }
+                                });
+                                return result;
+                            }
+                        },
                         axisPointer: { link: { xAxisIndex: 'all' } },
                         legend: { data: ['日K', 'MA5', 'MA10', 'MA20', '成交量', '预期形态'], top: 10 },
                         grid: [{ left: '5%', right: '5%', height: '60%', top: '10%' }, { left: '5%', right: '5%', top: '75%', height: '15%' }],
