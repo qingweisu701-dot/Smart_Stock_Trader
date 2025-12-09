@@ -35,10 +35,10 @@
                     <el-input
                         type="textarea" :rows="4"
                         placeholder="请直接从 Excel 复制数据粘贴到这里，或手动输入。
-格式支持：日期 开盘 收盘 最低 最高 成交量
+格式支持：日期 开盘 收盘 最低 最高 (或仅数值)
 例如：
-2023-01-01 10.5 11.2 10.0 11.5 5000
-2023-01-02 11.2 10.8 10.5 11.3 4500"
+10.5 11.2 10.0 11.5
+11.2 10.8 10.5 11.3"
                         v-model="importText">
                     </el-input>
                     <div style="text-align:right; margin-top:8px">
@@ -53,14 +53,9 @@
 
                 <div id="kline-editor" style="height:350px; width:100%"></div>
 
-                <div v-if="selectedIdx !== null" class="editor-bar">
+                <div v-if="selectedIdx !== null" class="editor-bar" style="background:#fff; padding:15px; border:1px solid #eee; margin-top:10px">
                     <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px">
-                        <span style="color:#409EFF">
-                            <el-icon><edit /></el-icon> 正在编辑第 [[selectedIdx+1]] 根
-                        </span>
-                        <el-tag size="small" :type="curr.close>=curr.open?'danger':'success'" style="margin-left:10px">
-                            [[ curr.close>=curr.open ? '阳线' : '阴线' ]]
-                        </el-tag>
+                        <span style="color:#409EFF">正在编辑第 [[selectedIdx+1]] 根</span>
                     </div>
                     <el-row :gutter="20">
                         <el-col :span="6"><span class="label">最高价</span><el-slider v-model="curr.high" :max="100" @input="updateChart"/></el-col>
@@ -68,9 +63,6 @@
                         <el-col :span="6"><span class="label">开盘价</span><el-slider v-model="curr.open" :max="100" @input="updateChart"/></el-col>
                         <el-col :span="6"><span class="label">收盘价</span><el-slider v-model="curr.close" :max="100" @input="updateChart"/></el-col>
                     </el-row>
-                </div>
-                <div v-else style="text-align:center; color:#999; padding:20px; margin-top:10px;">
-                    👈 请点击上方图表中的任意一根 K 线进行调整
                 </div>
 
                 <div style="text-align:center; margin-top:10px; padding-bottom:20px">
@@ -89,38 +81,25 @@
                 <el-collapse-item title="📈 看涨形态 (Bullish)" name="1">
                     <div v-for="p in buyPatterns" :key="p.id" class="p-item" @click="loadP(p)">
                         <span><el-tag size="small" type="danger">买</el-tag> <b>[[p.name]]</b></span>
-                        <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'PRESET')">
-                            <star-filled />
-                        </el-icon>
+                        <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'PRESET')"><star-filled /></el-icon>
                     </div>
                 </el-collapse-item>
-
                 <el-collapse-item title="📉 看跌形态 (Bearish)" name="2">
                     <div v-for="p in sellPatterns" :key="p.id" class="p-item" @click="loadP(p)">
                         <span><el-tag size="small" type="success">卖</el-tag> <b>[[p.name]]</b></span>
-                        <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'PRESET')">
-                            <star-filled />
-                        </el-icon>
+                        <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'PRESET')"><star-filled /></el-icon>
                     </div>
                 </el-collapse-item>
-
                 <el-collapse-item title="👤 我的模板" name="3">
-                    <div v-if="userPatterns.length===0" style="color:#999; text-align:center; padding:10px">暂无模板</div>
                     <div v-for="p in userPatterns" :key="p.id" class="p-item" @click="loadP(p)">
                         <span><el-tag size="small" type="info">自</el-tag> [[p.name]]</span>
                         <div>
-                            <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'USER')">
-                                <star-filled />
-                            </el-icon>
-                            <el-icon class="del-btn" @click.stop="delPattern(p.id)">
-                                <delete />
-                            </el-icon>
+                            <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'USER')"><star-filled /></el-icon>
+                            <el-icon class="del-btn" @click.stop="delPattern(p.id)"><delete /></el-icon>
                         </div>
                     </div>
                 </el-collapse-item>
-
                 <el-collapse-item title="⭐ 收藏模板" name="4">
-                    <div v-if="favPatterns.length===0" style="color:#999; text-align:center; padding:10px">暂无收藏</div>
                     <div v-for="p in favPatterns" :key="p.id" class="p-item" @click="loadP(p)">
                         <span><el-tag size="small" type="warning">⭐</el-tag> [[p.name]]</span>
                     </div>
@@ -131,12 +110,12 @@
 </el-row>
 
 <el-dialog v-model="saveDialog.visible" title="保存自定义形态" width="40%">
-    <div v-if="aiTrend" :class="aiTrend==='BUY'?'ai-box-buy':'ai-box-sell'" style="margin-bottom:15px">
+    <div v-if="aiTrend" :class="aiTrend==='BUY'?'ai-box-buy':'ai-box-sell'" style="margin-bottom:15px; padding:10px; background:#f0f9eb; color:#67c23a">
         <el-icon style="vertical-align:middle; margin-right:5px"><cpu /></el-icon>
         AI识别趋势：<b>[[aiTrend==='BUY'?'看涨':'看跌']]</b>
     </div>
 
-    <div class="verify-box">
+    <div class="verify-box" style="background: #fff7e6; border: 1px solid #ffe4bb; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
         <div style="display:flex; justify-content:space-between; align-items:center">
             <span style="font-weight:bold; color:#606266">📊 历史回测验证</span>
             <el-button size="small" type="warning" plain @click="runVerify" :loading="verifying">
@@ -151,18 +130,13 @@
     </div>
 
     <el-form label-position="top" style="margin-top:15px">
-        <el-form-item label="形态名称">
-            <el-input v-model="saveDialog.name" placeholder="例如：我的低位螺旋桨"></el-input>
-        </el-form-item>
-        <el-form-item label="信号类型 (自动归类)">
+        <el-form-item label="形态名称"><el-input v-model="saveDialog.name" placeholder="例如：我的低位螺旋桨"></el-input></el-form-item>
+        <el-form-item label="信号类型">
             <el-radio-group v-model="saveDialog.desc">
-                <el-radio label="BUY" border>📈 看涨形态</el-radio>
-                <el-radio label="SELL" border>📉 看跌形态</el-radio>
+                <el-radio label="BUY" border>📈 看涨</el-radio><el-radio label="SELL" border>📉 看跌</el-radio>
             </el-radio-group>
         </el-form-item>
-        <el-form-item>
-            <el-checkbox v-model="saveDialog.isFav" label="同时加入“收藏模板”" border></el-checkbox>
-        </el-form-item>
+        <el-form-item><el-checkbox v-model="saveDialog.isFav" label="同时加入收藏" border></el-checkbox></el-form-item>
     </el-form>
     <template #footer><el-button type="primary" @click="doSave" style="width:100%">确认保存</el-button></template>
 </el-dialog>
@@ -171,16 +145,9 @@
 {% block scripts %}
 <style>
     .tip-box { background:#e6f7ff; color:#1890ff; padding:8px 12px; font-size:12px; border-radius:4px; margin-bottom:10px; border:1px solid #91d5ff; }
-    .editor-bar { background:#fff; padding:15px; border:1px solid #dcdfe6; border-radius:6px; margin-top:5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .p-item { padding:10px; border-bottom:1px solid #f0f0f0; cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
-    .p-item:hover{background:#f9f9f9}
-    .label { font-size:12px; color:#909399; }
-    .fav-icon { color: #ddd; font-size: 16px; margin-left: 8px; transition: color 0.3s; }
-    .fav-icon:hover { color: #f7ba2a; } .fav-icon.active { color: #E6A23C; }
+    .p-item { padding:10px; border-bottom:1px solid #f0f0f0; cursor:pointer; display:flex; align-items:center; justify-content:space-between; } .p-item:hover{background:#f9f9f9}
+    .fav-icon { color: #ddd; font-size: 16px; margin-left: 8px; } .fav-icon:hover { color: #f7ba2a; } .fav-icon.active { color: #E6A23C; }
     .del-btn { color: #F56C6C; margin-left: 8px; font-size: 16px; }
-    .ai-box-buy{color:#67c23a; background:#f0f9eb; padding:10px; border-radius:4px}
-    .ai-box-sell{color:#f56c6c; background:#fef0f0; padding:10px; border-radius:4px}
-    .verify-box { background: #fff7e6; border: 1px solid #ffe4bb; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
 </style>
 <script>
 function pageSetup() {
@@ -239,12 +206,7 @@ function pageSetup() {
     const removeCandle = () => { if(selectedIdx.value!==null) { klineData.value.splice(selectedIdx.value, 1); selectedIdx.value=null; renderKline(); } };
 
     const loadList = async () => { try { const res = await axios.get('/api/pattern/list/'); list.value = res.data.data; } catch(e){} };
-
-    const loadP = (p) => {
-        if (p.source_type === 'KLINE') { mode.value = 'kline'; klineData.value = p.data; setTimeout(renderKline, 100); }
-        else { mode.value = 'mouse'; drawPoints = p.data; setTimeout(renderDraw, 100); }
-    };
-
+    const loadP = (p) => { if (p.source_type === 'KLINE') { mode.value = 'kline'; klineData.value = p.data; setTimeout(renderKline, 100); } else { mode.value = 'mouse'; drawPoints = p.data; setTimeout(renderDraw, 100); } };
     const toggleFav = async (p, type) => { await axios.post('/api/pattern/fav/toggle/', {id: p.id, source_type: type}); loadList(); ElementPlus.ElMessage.success('操作成功'); };
 
     const prepareSave = async () => {
@@ -255,10 +217,11 @@ function pageSetup() {
             aiTrend.value = res.data.data.trend;
             saveDialog.value.desc = aiTrend.value==='SELL'?'SELL':'BUY';
             saveDialog.value.visible = true;
-            verifyResult.value = null; // 重置
+            verifyResult.value = null;
         } catch(e) {}
     };
 
+    // 🔥 找回：运行验证
     const runVerify = async () => {
         verifying.value = true;
         const type = mode.value==='mouse'?'DRAW':'KLINE';
@@ -283,6 +246,7 @@ function pageSetup() {
     const delPattern = async (id) => { await axios.post('/api/pattern/delete/', {id}); loadList(); };
     const onModeChange = () => { setTimeout(() => { if(mode.value==='mouse') chart1.resize(); else chart2.resize(); }, 100); }
 
+    // 🔥 找回：数据导入逻辑
     const loadDemoData = () => { importText.value = `20 25 18 28\n26 24 22 30\n23 28 20 29`; };
     const parseImportData = () => {
         if (!importText.value.trim()) return;

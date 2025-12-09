@@ -3,15 +3,46 @@
 
 {% block content %}
 <el-row :gutter="20">
-    <el-col :span="24">
+    <el-col :span="6">
+        <el-card shadow="hover" class="metric-card">
+            <div class="label">📈 上证指数</div>
+            <div class="value" :class="currentSnapshot.is_up ? 'red' : 'green'">
+                [[ currentSnapshot.price ]] <small>[[ currentSnapshot.change ]]</small>
+            </div>
+            <div class="sub">成交额: [[ currentSnapshot.volume ]]</div>
+        </el-card>
+    </el-col>
+    <el-col :span="6">
+        <el-card shadow="hover" class="metric-card">
+            <div class="label">🔥 市场情绪</div>
+            <div class="value">[[market.up_count]] 家上涨</div>
+            <el-progress :percentage="50" :show-text="false" color="#F56C6C"></el-progress>
+            <div class="sub">[[market.down_count]] 家下跌</div>
+        </el-card>
+    </el-col>
+    <el-col :span="6"><el-card shadow="hover" class="metric-card"><div class="label">💰 资金流向</div><div class="value red">+32亿</div></el-card></el-col>
+    <el-col :span="6"><el-card shadow="hover" class="metric-card action" @click="go('/api/pattern/lab/')"><div class="label" style="color:#409EFF">🎨 策略实验室</div><div class="value" style="font-size:18px">绘制新策略 ></div></el-card></el-col>
+</el-row>
+
+<el-row :gutter="20" style="margin-top:20px">
+    <el-col :span="18">
         <el-card>
             <template #header>
                 <div style="display:flex; justify-content:space-between">
-                    <span>📊 核心指数趋势 (多指标融合版)</span>
-                    <el-select v-model="indexType" size="small" @change="loadData"><el-option label="上证" value="000001.SH"></el-option></el-select>
+                    <span>📊 核心指数趋势</span>
+                    <el-select v-model="indexType" size="small"><el-option label="上证" value="000001.SH"></el-option></el-select>
                 </div>
             </template>
             <div id="main-chart" style="height:550px"></div>
+        </el-card>
+    </el-col>
+
+    <el-col :span="6">
+        <el-card header="🚀 实时信号预警" style="height:640px; overflow-y:auto">
+            <div v-for="item in signals" :key="item.code" class="signal-item" @click="showSignalDetail(item)">
+                <div class="s-head"><span>[[item.name]]</span> <el-tag size="small" type="danger">[[item.pattern]]</el-tag></div>
+                <div class="s-info">[[item.code]] <span class="red">[[item.change]]%</span></div>
+            </div>
         </el-card>
     </el-col>
 </el-row>
