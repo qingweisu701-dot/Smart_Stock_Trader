@@ -1,77 +1,101 @@
 import numpy as np
 import pandas as pd
-from datetime import timedelta
-from data_engine.models import StockDaily
+import datetime
+from .matcher import calculate_indicators
 
 
-def run_lstm_prediction(code, days=5):
+def run_lstm_prediction(code):
     """
-    模拟 LSTM 模型预测未来 N 天的走势
-    (工程演示版：使用统计学投影代替耗时的神经网络训练)
+    模拟 LSTM (长短期记忆网络) - 擅长捕捉长期趋势
+    特点：曲线平滑，趋势性强
     """
-    # 1. 获取历史数据 (最近 60 天)
-    qs = StockDaily.objects.filter(ts_code=code).order_by('trade_date')
-    if not qs.exists():
+    return _generate_mock_data(code, model_type="LSTM", volatility=0.02, trend_strength=0.1)
+
+
+def run_ensemble_prediction(code):
+    """
+    模拟 Ensemble (集成学习/随机森林) - 擅长多因子分类
+    特点：对突变敏感，曲线波动较大，不仅看趋势还看因子共振
+    """
+    return _generate_mock_data(code, model_type="Ensemble", volatility=0.04, trend_strength=0.05)
+
+
+def _generate_mock_data(code, model_type, volatility, trend_strength):
+    """
+    通用模拟生成器
+    """
+    try:
+        # 1. 历史数据
+        dates = pd.date_range(end=datetime.date.today(), periods=90).strftime('%Y-%m-%d').tolist()
+        base = 100 if not code.startswith('6') else 20
+        prices = []
+        curr = base
+        for i in range(len(dates)):
+            # 模拟波动
+            noise = np.random.normal(0, volatility)
+            trend = (i / 90) * trend_strength  # 趋势项
+            curr = curr * (1 + trend + noise)
+            prices.append(round(curr, 2))
+
+        # 2. 未来预测 (5天)
+        future_dates = pd.date_range(start=datetime.date.today() + datetime.timedelta(days=1), periods=5).strftime(
+            '%Y-%m-%d').tolist()
+        future_prices = []
+        pred = prices[-1]
+
+        # 不同的模型有不同的预测特征
+        for i in range(5):
+            if model_type == "LSTM":
+                # LSTM: 惯性强，平滑
+                change = np.random.normal(0.005, 0.01)
+            else:
+                # Ensemble: 波动大，可能出现反转
+                change = np.random.normal(0, 0.03)
+
+            pred = pred * (1 + change)
+            future_prices.append(round(pred, 2))
+
+        # 3. 因子分析 (复用)
+        # 这里简单模拟，真实场景应调用 calculate_indicators 分析
+        score = np.random.randint(40, 90)
+        factors = [
+            {'name': '趋势动量', 'type': 'bull', 'desc': f'{model_type} 模型捕捉到上涨动能'},
+            {'name': '量价配合', 'type': 'bear' if score < 50 else 'bull',
+             'desc': '成交量放大' if score > 60 else '缩量盘整'}
+        ]
+
+        # 4. 建议
+        suggestion = 'HOLD'
+        if score >= 70:
+            suggestion = 'BUY'
+        elif score <= 30:
+            suggestion = 'SELL'
+
+        return {
+            'code': code,
+            'model': model_type,
+            'score': score,
+            'suggestion': suggestion,
+            'history_dates': dates,
+            'history_prices': prices,
+            'future_dates': future_dates,
+            'future_prices': future_prices,
+            'final_return': round((future_prices[-1] - prices[-1]) / prices[-1] * 100, 2),
+            'factors': factors,
+            'advice': {
+                'buy_price': round(prices[-1] * 0.98, 2),
+                'sell_price': round(prices[-1] * 1.05, 2),
+                'period': '3-5天' if model_type == 'Ensemble' else '1-2周',
+                'stop_loss': round(prices[-1] * 0.95, 2)
+            }
+        }
+    except Exception as e:
+        print(f"Pred Error: {e}")
         return None
-    data_list = list(qs.values('trade_date', 'close_price'))
-    df = pd.DataFrame(data_list)
 
-    if len(df) < 30:
-        return None
-    if not df.empty:
-        df.rename(columns={'close_price': 'close'}, inplace=True)
 
-    last_date = df.iloc[-1]['trade_date']
-    last_price = df.iloc[-1]['close']
-
-    # 2. 计算近期趋势 (Momentum)
-    # 简单逻辑：看最近5天的斜率
-    recent_trend = (df.iloc[-1]['close'] - df.iloc[-5]['close']) / df.iloc[-5]['close']
-
-    # 3. 生成未来预测数据
-    future_dates = []
-    future_prices = []
-
-    # 模拟波动率
-    volatility = df['close'].pct_change().std()
-    if pd.isna(volatility): volatility = 0.02
-
-    current_price = last_price
-
-    for i in range(1, days + 1):
-        # 推算日期 (跳过周末简单处理)
-        next_date = last_date + timedelta(days=i)
-        future_dates.append(next_date.strftime('%Y-%m-%d'))
-
-        # 模拟预测算法：趋势 + 随机波动 + 均值回归
-        # 这是一个简化的数学模型，用来模拟 LSTM 输出的平滑曲线
-        drift = recent_trend * 0.5  # 趋势衰减
-        shock = np.random.normal(0, volatility * 0.5)  # 随机扰动
-
-        change = current_price * (drift + shock)
-        current_price += change
-
-        future_prices.append(round(current_price, 2))
-
-    # 4. 生成操作建议 (汉化部分)
-    # 如果预测第5天比今天涨 2% 以上 -> 建议买入
-    final_return = (future_prices[-1] - last_price) / last_price
-    if final_return > 0.02:
-        suggestion = "强烈推荐买入 (Strong Buy)"
-        color = "red"
-    elif final_return < -0.02:
-        suggestion = "建议减仓/卖出 (Sell)"
-        color = "green"
-    else:
-        suggestion = "保持观望 (Hold)"
-        color = "gray"
-
-    return {
-        'history_dates': [d.strftime('%Y-%m-%d') for d in df['trade_date'].tolist()[-30:]],  # 只取最后30天展示
-        'history_prices': df['close'].tail(30).tolist(),
-        'future_dates': future_dates,
-        'future_prices': future_prices,
-        'suggestion': suggestion,
-        'suggestion_color': color,
-        'final_return': round(final_return * 100, 2)
-    }
+# 统一入口
+def run_predict_dispatch(code, model='LSTM'):
+    if model == 'Ensemble':
+        return run_ensemble_prediction(code)
+    return run_lstm_prediction(code)

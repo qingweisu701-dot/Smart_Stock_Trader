@@ -26,26 +26,32 @@
                 </template>
             </el-table-column>
 
-            <el-table-column prop="group" label="分组" width="120">
+            <el-table-column prop="group" label="分组" width="150">
                 <template #default="scope">
-                    <el-tag :type="scope.row.group==='TOP'?'danger':(scope.row.group==='WATCH'?'warning':'')">
-                        [[ scope.row.group || '默认' ]]
-                    </el-tag>
+                    <el-popover placement="bottom" title="修改分组" :width="200" trigger="click">
+                        <template #reference>
+                            <el-tag :type="scope.row.group==='TOP'?'danger':(scope.row.group==='WATCH'?'warning':'info')" style="cursor:pointer">
+                                [[ scope.row.group || '默认' ]] <el-icon><Edit /></el-icon>
+                            </el-tag>
+                        </template>
+                        <div style="display:flex; gap:5px">
+                            <el-select v-model="scope.row.newGroup" placeholder="选择分组" size="small">
+                                <el-option label="默认" value="DEFAULT"></el-option>
+                                <el-option label="观察" value="WATCH"></el-option>
+                                <el-option label="龙头" value="TOP"></el-option>
+                            </el-select>
+                            <el-button size="small" type="primary" @click="updateGroup(scope.row)">确</el-button>
+                        </div>
+                    </el-popover>
                 </template>
             </el-table-column>
 
             <el-table-column label="快捷操作">
                 <template #default="scope">
                     <el-button-group>
-                        <el-button size="small" type="primary" plain @click="showDetail(scope.row)">
-                            <el-icon><data-line /></el-icon> 详情
-                        </el-button>
-                        <el-button size="small" type="success" plain @click="toPredict(scope.row)">
-                            <el-icon><cpu /></el-icon> AI预测
-                        </el-button>
-                        <el-button size="small" type="danger" plain @click="removeFav(scope.row)">
-                            <el-icon><delete /></el-icon> 移除
-                        </el-button>
+                        <el-button size="small" type="primary" plain @click="showDetail(scope.row)">详情</el-button>
+                        <el-button size="small" type="success" plain @click="toPredict(scope.row)">预测</el-button>
+                        <el-button size="small" type="danger" plain @click="removeFav(scope.row)">移除</el-button>
                     </el-button-group>
                 </template>
             </el-table-column>
@@ -54,12 +60,16 @@
 
     <div v-else style="text-align:center; padding:50px; color:#909399">
         <el-icon size="60"><star /></el-icon>
-        <p style="margin-top:20px">暂无收藏的股票</p>
-        <el-button type="primary" plain @click="goScan">立即去筛选</el-button>
+        <p style="margin-top:20px">暂无收藏</p>
     </div>
 </el-card>
 
-<el-dialog v-model="detailVisible" width="80%" title="个股详情" @opened="renderChart">
+<el-dialog v-model="detailVisible" width="85%" title="个股详情" @opened="renderChart">
+    <div style="text-align:right; margin-bottom:5px">
+        <el-radio-group v-model="currIndicator" size="small" @change="renderChart">
+            <el-radio-button label="MACD">MACD</el-radio-button><el-radio-button label="KDJ">KDJ</el-radio-button><el-radio-button label="RSI">RSI</el-radio-button>
+        </el-radio-group>
+    </div>
     <div id="kline-chart" style="height:500px"></div>
 </el-dialog>
 {% endblock %}
@@ -71,78 +81,70 @@ function pageSetup() {
     const favList = ref([]);
     const detailVisible = ref(false);
     const currCode = ref('');
+    const currIndicator = ref('MACD');
     let chart = null;
 
-    // 1. 加载收藏列表
     const loadList = async () => {
         try {
             const res = await axios.get('/api/favorite/list/');
-            favList.value = res.data.data;
-        } catch(e) {
-            ElementPlus.ElMessage.error('加载失败');
-        }
+            favList.value = res.data.data.map(item => ({...item, newGroup: item.group}));
+        } catch(e) { ElementPlus.ElMessage.error('加载失败'); }
     };
 
-    // 2. 跳转去筛选
-    const goScan = () => {
-        window.location.href = '/api/analysis/scan/';
+    // 🔥 新增：更新分组
+    const updateGroup = async (row) => {
+        if(!row.newGroup) return;
+        await axios.post('/api/favorite/update/', {code: row.code, group: row.newGroup});
+        loadList();
+        ElementPlus.ElMessage.success('分组已更新');
     };
 
-    // 3. 跳转去预测 (带参数)
-    const toPredict = (row) => {
-        // 这里的逻辑是跳转到预测页，并自动填入代码
-        // 由于我们是单页应用逻辑，可以通过 localStorage 传参或者 URL 传参
-        // 这里简单使用 URL 传参，需要在 prediction_ai.html 里解析
-        window.location.href = `/api/prediction/ai/?code=${row.code}`;
-    };
-
-    // 4. 移除收藏 (调用 add 接口的变体或者新增 remove 接口，这里复用 add 逻辑需后端支持 toggle，或者我们直接调 add 但后端逻辑如果是 toggle 就好了)
-    // 为了稳妥，我们假设后端 api_fav_add 是“添加/更新”，这里我们建议在 views.py 加一个 remove 接口，
-    // 或者我们直接用 toggle 逻辑?
-    // 既然你之前没有 remove 接口，我们临时用一个逻辑：重新调 add 可能会重复。
-    // 建议：直接在 views.py 补一个 delete 逻辑，或者前端假装移除（不推荐）。
-    // 最佳方案：我假设你已经在 urls.py 里配了 favorite/add，我们去 views.py 确认一下逻辑。
-    // 修正：我们直接调用 add，但之前的逻辑是 get_or_create。
-    // 为了不改后端，我们这里先留空，或者你可以去 views.py 加一个 api_fav_remove。
-    // 既然要补全，我给你写一个通用的移除逻辑 (需后端支持，这里先用 add 顶替，实际应该去后端加 delete)
+    const goScan = () => window.location.href = '/api/analysis/scan/';
+    const toPredict = (row) => window.location.href = `/api/prediction/ai/?code=${row.code}`;
     const removeFav = async (row) => {
-    await axios.post('/api/favorite/delete/', {code: row.code});
-    loadList(); // 刷新列表
-    ElementPlus.ElMessage.success('已移除');
-};
-
-    // 5. 查看详情 (渲染 K 线)
-    const showDetail = (row) => {
-        currCode.value = row.code;
-        detailVisible.value = true;
+        await axios.post('/api/favorite/delete/', {code: row.code});
+        loadList();
+        ElementPlus.ElMessage.success('已移除');
     };
+
+    const showDetail = (row) => { currCode.value = row.code; detailVisible.value = true; };
 
     const renderChart = async () => {
         const res = await axios.get(`/api/stock/detail/?code=${currCode.value}`);
+        if(res.data.code !== 200) return;
         const d = res.data.data;
+        const ind = d.indicators;
         if(chart) chart.dispose();
         chart = echarts.init(document.getElementById('kline-chart'));
 
-        // 简单渲染，不带复杂信号，主要看走势
+        let indSeries = [];
+        if(currIndicator.value === 'MACD') {
+            indSeries = [{name:'MACD', type:'bar', xAxisIndex:2, yAxisIndex:2, data:ind.MACD, itemStyle:{color:p=>p.value>0?'#ef232a':'#14b143'}},{name:'DIF', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DIF, symbol:'none'},{name:'DEA', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DEA, symbol:'none'}];
+        } else if(currIndicator.value === 'KDJ') {
+            indSeries = [{name:'K', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.K, symbol:'none'},{name:'D', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.D, symbol:'none'},{name:'J', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.J, symbol:'none'}];
+        } else {
+            indSeries = [{name:'RSI', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.RSI, symbol:'none'}];
+        }
+
         chart.setOption({
-            tooltip: {trigger:'axis', axisPointer:{type:'cross'}},
-            xAxis: {data: d.dates},
-            yAxis: {scale:true},
-            dataZoom: [{type:'inside'}],
+            tooltip: { trigger:'axis', axisPointer:{type:'cross'} },
+            legend: { top:0, data:['K线','MA5','MA20','成交量',currIndicator.value] },
+            grid: [{left:'5%',right:'5%',height:'50%'}, {left:'5%',right:'5%',top:'62%',height:'15%'}, {left:'5%',right:'5%',top:'80%',height:'15%'}],
+            xAxis: [{type:'category', data:d.dates, boundaryGap:false, axisLine:{onZero:false}}, {type:'category', gridIndex:1, data:d.dates, show:false}, {type:'category', gridIndex:2, data:d.dates, show:false}],
+            yAxis: [{scale:true, splitArea:{show:true}}, {gridIndex:1, splitNumber:2, axisLabel:{show:false}}, {gridIndex:2, splitNumber:2, axisLabel:{show:false}}],
+            dataZoom: [{type:'inside', xAxisIndex:[0,1,2], start:50, end:100}, {type:'slider', xAxisIndex:[0,1,2], bottom:0}],
             series: [
-                {
-                    type: 'candlestick',
-                    data: d.values,
-                    itemStyle: {color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}
-                },
-                { name:'MA5', type:'line', data:d.mas.MA5, smooth:true, lineStyle:{opacity:0.5} }
+                {name:'K线', type:'candlestick', data:d.values.map(v=>[v[0],v[1],v[2],v[3]]), itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
+                {name:'MA5', type:'line', data:ind.MA5, smooth:true, lineStyle:{opacity:0.5}},
+                {name:'MA20', type:'line', data:ind.MA20, smooth:true, lineStyle:{opacity:0.5}},
+                {name:'成交量', type:'bar', xAxisIndex:1, yAxisIndex:1, data:d.values.map(v=>v[4]), itemStyle:{color:p=>d.values[p.dataIndex][1]>d.values[p.dataIndex][0]?'#ef232a':'#14b143'}},
+                ...indSeries
             ]
         });
     };
 
     onMounted(loadList);
-
-    return { favList, detailVisible, goScan, toPredict, removeFav, showDetail, renderChart };
+    return { favList, detailVisible, goScan, toPredict, removeFav, showDetail, renderChart, currIndicator, updateGroup };
 }
 </script>
 {% endblock %}

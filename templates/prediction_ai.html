@@ -1,57 +1,130 @@
 {% extends 'base.html' %}
-{% block title %}AI趋势预测{% endblock %}
+{% block title %}AI 智能预测{% endblock %}
+
 {% block content %}
-<el-container style="height: 85vh; border: 1px solid #eee; background:#fff">
-    <el-aside width="250px" style="border-right:1px solid #eee; padding:10px">
-        <el-input v-model="code" placeholder="输入代码搜索" prefix-icon="Search" @change="runPredict"></el-input>
-        <div style="margin-top:10px; color:#999; font-size:12px">我的收藏</div>
-        <div v-for="item in favList" :key="item.code" class="fav-item" @click="code=item.code; runPredict()">
-            [[item.name]] <span style="float:right">[[item.code]]</span>
-        </div>
-    </el-aside>
-    <el-main>
-        <div v-if="result" style="text-align:center">
-            <h2 :style="{color: result.final_return>0?'red':'green'}">[[ result.suggestion ]]</h2>
-            <p>未来5日涨幅预测: <b>[[ result.final_return ]]%</b></p>
-        </div>
-        <div id="chart" style="height:400px; width:100%"></div>
-    </el-main>
+<el-container style="height:85vh; padding:20px; background:#f0f2f5">
+    <el-row :gutter="20" style="width:100%">
+        <el-col :span="6">
+            <el-card class="box-card" style="height:100%">
+                <template #header>
+                    <span>🤖 智能预测配置</span>
+                </template>
+
+                <el-form label-position="top">
+                    <el-form-item label="标的代码">
+                        <el-input v-model="stockCode" placeholder="如 600519.SH" clearable></el-input>
+                    </el-form-item>
+                    <el-form-item label="预测算法模型">
+                        <el-select v-model="selectedModel" style="width:100%">
+                            <el-option label="LSTM 时序深度网络 (推荐)" value="LSTM"></el-option>
+                            <el-option label="RandomForest 集成学习" value="Ensemble"></el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-button type="primary" @click="runPredict" :loading="loading" style="width:100%" icon="VideoPlay">开始预测</el-button>
+                </el-form>
+
+                <div v-if="result" style="margin-top:30px; border-top:1px solid #eee; padding-top:20px">
+                    <div style="text-align:center">
+                        <el-progress type="dashboard" :percentage="result.score" :color="scoreColor"></el-progress>
+                        <div style="font-weight:bold; font-size:16px">[[result.suggestion]]</div>
+                        <div style="font-size:12px; color:#999">基于 [[result.model]] 模型</div>
+                    </div>
+                    <div style="margin-top:10px">
+                        <div v-for="(f,i) in result.factors" :key="i" style="font-size:12px; margin-bottom:5px">
+                            <el-tag size="small" :type="f.type==='bull'?'danger':'success'">[[f.name]]</el-tag> [[f.desc]]
+                        </div>
+                    </div>
+                </div>
+            </el-card>
+        </el-col>
+
+        <el-col :span="18">
+            <el-card v-if="result" style="height:100%; display:flex; flex-direction:column">
+                <template #header>
+                    <span>📈 趋势预测与建议 ([[result.code]])</span>
+                </template>
+
+                <el-row :gutter="20" style="margin-bottom:20px; text-align:center">
+                    <el-col :span="6"><div style="background:#f9f9f9;padding:10px">建议买入<br><b style="color:#f56c6c">[[result.advice.buy_price]]</b></div></el-col>
+                    <el-col :span="6"><div style="background:#f9f9f9;padding:10px">目标止盈<br><b style="color:#f56c6c">[[result.advice.sell_price]]</b></div></el-col>
+                    <el-col :span="6"><div style="background:#f9f9f9;padding:10px">建议周期<br><b style="color:#409eff">[[result.advice.period]]</b></div></el-col>
+                    <el-col :span="6"><div style="background:#f9f9f9;padding:10px">预期收益<br><b style="color:#e6a23c">[[result.final_return]]%</b></div></el-col>
+                </el-row>
+
+                <div id="predict-chart" style="flex:1; min-height:400px"></div>
+            </el-card>
+            <el-empty v-else description="请配置参数后运行"></el-empty>
+        </el-col>
+    </el-row>
 </el-container>
 {% endblock %}
 
 {% block scripts %}
-<style>.fav-item{padding:10px; cursor:pointer; border-bottom:1px solid #eee} .fav-item:hover{background:#f9f9f9}</style>
 <script>
 function pageSetup() {
-    const code = ref('000001');
-    const favList = ref([]);
+    const { ref, onMounted, computed } = Vue;
+    const stockCode = ref('');
+    const selectedModel = ref('LSTM'); // 默认模型
+    const loading = ref(false);
     const result = ref(null);
     let chart = null;
 
-    const runPredict = async () => {
-        const res = await axios.post('/api/prediction/run/', {code: code.value});
-        result.value = res.data.data;
-        if(chart) chart.dispose();
-        chart = echarts.init(document.getElementById('chart'));
+    onMounted(() => {
+        const params = new URLSearchParams(window.location.search);
+        if(params.get('code')) {
+            stockCode.value = params.get('code');
+            runPredict();
+        }
+    });
 
-        const d = res.data.data;
-        const x = [...d.history_dates, ...d.future_dates];
-        const y1 = d.history_prices;
-        const y2 = Array(y1.length-1).fill(null).concat([y1[y1.length-1]], d.future_prices);
+    const scoreColor = computed(() => {
+        if(!result.value) return '#909399';
+        return result.value.score >= 60 ? '#F56C6C' : '#67C23A';
+    });
+
+    const runPredict = async () => {
+        if(!stockCode.value) return ElementPlus.ElMessage.warning('请输入代码');
+        loading.value = true;
+        try {
+            // 🔥 发送模型参数
+            const res = await axios.post('/api/prediction/run/', {
+                code: stockCode.value,
+                model: selectedModel.value
+            });
+            if(res.data.code === 200) {
+                result.value = res.data.data;
+                setTimeout(() => renderChart(res.data.data), 100);
+            } else {
+                ElementPlus.ElMessage.error(res.data.msg);
+            }
+        } catch(e) { ElementPlus.ElMessage.error('Error'); }
+        finally { loading.value = false; }
+    };
+
+    const renderChart = (data) => {
+        if(chart) chart.dispose();
+        chart = echarts.init(document.getElementById('predict-chart'));
+
+        const historyLen = data.history_dates.length;
+        const allDates = [...data.history_dates, ...data.future_dates];
+        const historySeries = data.history_prices.concat(new Array(data.future_prices.length).fill(null));
+        const futureSeries = new Array(historyLen-1).fill(null);
+        futureSeries.push(data.history_prices[historyLen-1]);
+        futureSeries.push(...data.future_prices);
 
         chart.setOption({
-            tooltip:{trigger:'axis'}, xAxis:{data:x}, yAxis:{scale:true},
-            series:[{type:'line', data:y1, name:'历史'}, {type:'line', data:y2, name:'AI预测', lineStyle:{type:'dashed'}}]
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['历史', '预测'] },
+            xAxis: { data: allDates },
+            yAxis: { scale: true },
+            series: [
+                { name: '历史', type: 'line', data: historySeries, itemStyle: { color: '#333' } },
+                { name: '预测', type: 'line', data: futureSeries, itemStyle: { color: '#f56c6c' }, lineStyle: { type: 'dashed' } }
+            ]
         });
     };
 
-    onMounted(async () => {
-        const res = await axios.get('/api/favorite/list/');
-        favList.value = res.data.data;
-        runPredict();
-    });
-
-    return { code, favList, result, runPredict };
+    return { stockCode, selectedModel, loading, result, runPredict, scoreColor };
 }
 </script>
 {% endblock %}
