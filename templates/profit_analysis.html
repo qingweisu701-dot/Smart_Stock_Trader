@@ -1,15 +1,83 @@
 {% extends 'base.html' %}
-{% block title %}收益分析{% endblock %}
+{% block title %}账户收益分析{% endblock %}
+
 {% block content %}
 <el-row :gutter="20">
     <el-col :span="24">
         <el-card>
-            <template #header><span>💰 历史收益与回测分析</span></template>
-            <div style="height: 400px; display: flex; justify-content: center; align-items: center; color: #999;">
-                (此处展示资金曲线、月度收益热力图、最大回撤等专业报表)
-                <br>开发中...
-            </div>
+            <template #header>
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <span>💰 账户收益与回测分析</span>
+                    <el-button type="primary" size="small" @click="initCharts">刷新数据</el-button>
+                </div>
+            </template>
+            
+            <el-row :gutter="20" style="margin-bottom: 20px;">
+                <el-col :span="6">
+                    <div style="text-align:center; padding:10px; background:#f0f9eb; border-radius:4px">
+                        <div style="color:#67C23A; font-size:24px; font-weight:bold">+12.5%</div>
+                        <div style="color:#666">累计收益率</div>
+                    </div>
+                </el-col>
+                <el-col :span="6">
+                    <div style="text-align:center; padding:10px; background:#fdf6ec; border-radius:4px">
+                        <div style="color:#E6A23C; font-size:24px; font-weight:bold">68.2%</div>
+                        <div style="color:#666">策略胜率</div>
+                    </div>
+                </el-col>
+                <el-col :span="6">
+                    <div style="text-align:center; padding:10px; background:#fef0f0; border-radius:4px">
+                        <div style="color:#F56C6C; font-size:24px; font-weight:bold">-5.2%</div>
+                        <div style="color:#666">最大回撤</div>
+                    </div>
+                </el-col>
+                <el-col :span="6">
+                    <div style="text-align:center; padding:10px; background:#ecf5ff; border-radius:4px">
+                        <div style="color:#409EFF; font-size:24px; font-weight:bold">12</div>
+                        <div style="color:#666">总交易次数</div>
+                    </div>
+                </el-col>
+            </el-row>
+
+            <div id="pnl-chart" style="height: 400px;"></div>
         </el-card>
     </el-col>
 </el-row>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function pageSetup() {
+    const { onMounted } = Vue;
+    
+    const initCharts = () => {
+        const chart = echarts.init(document.getElementById('pnl-chart'));
+        const dates = ['1月','2月','3月','4月','5月','6月'];
+        
+        chart.setOption({
+            title: { text: '资金权益曲线' },
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['策略收益', '基准收益'] },
+            xAxis: { data: dates },
+            yAxis: { type: 'value' },
+            series: [
+                {
+                    name: '策略收益', type: 'line', smooth: true,
+                    data: [0, 5, 3, 8, 15, 12],
+                    itemStyle: { color: '#F56C6C' },
+                    areaStyle: { opacity: 0.1 }
+                },
+                {
+                    name: '基准收益', type: 'line', smooth: true,
+                    data: [0, 2, 1, 4, 3, 5],
+                    itemStyle: { color: '#909399' }
+                }
+            ]
+        });
+    };
+
+    onMounted(initCharts);
+    return { initCharts };
+}
+</script>
 {% endblock %}

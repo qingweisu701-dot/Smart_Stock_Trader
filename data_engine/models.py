@@ -1,5 +1,7 @@
 from django.db import models
 
+
+# 1. 股票基础信息
 class StockBasic(models.Model):
     ts_code = models.CharField(max_length=20, verbose_name='股票代码', primary_key=True)
     name = models.CharField(max_length=20, verbose_name='股票名称')
@@ -7,8 +9,11 @@ class StockBasic(models.Model):
     market_cap = models.FloatField(verbose_name='总市值(亿元)', null=True, blank=True)
     list_date = models.CharField(max_length=20, verbose_name='上市日期', null=True, blank=True)
     is_dragon_tiger = models.BooleanField(default=False, verbose_name='是否龙虎榜')
+
     class Meta: verbose_name = '股票列表'
 
+
+# 2. 日线行情
 class StockDaily(models.Model):
     ts_code = models.CharField(max_length=20, db_index=True)
     trade_date = models.DateField(db_index=True)
@@ -18,10 +23,13 @@ class StockDaily(models.Model):
     low_price = models.FloatField()
     vol = models.FloatField()
     amount = models.FloatField()
+
     class Meta:
         indexes = [models.Index(fields=['ts_code', 'trade_date'])]
         constraints = [models.UniqueConstraint(fields=['ts_code', 'trade_date'], name='unique_stock_date')]
 
+
+# 3. 用户形态 (手绘/K线)
 class UserPattern(models.Model):
     PATTERN_TYPES = (('DRAW', '趋势手绘'), ('KLINE', 'K线构造'))
     name = models.CharField(max_length=50)
@@ -29,22 +37,32 @@ class UserPattern(models.Model):
     description = models.CharField(max_length=200, blank=True)
     data_points = models.TextField()
     create_time = models.DateTimeField(auto_now_add=True)
+
     class Meta: ordering = ['-create_time']
 
+
+# 4. 形态收藏
 class PatternFavorite(models.Model):
     pattern_id = models.CharField(max_length=50)
     pattern_type = models.CharField(max_length=20, default='PRESET')
     add_time = models.DateTimeField(auto_now_add=True)
-    class Meta: constraints = [models.UniqueConstraint(fields=['pattern_id', 'pattern_type'], name='unique_fav_pattern')]
 
+    class Meta: constraints = [
+        models.UniqueConstraint(fields=['pattern_id', 'pattern_type'], name='unique_fav_pattern')]
+
+
+# 5. 股票收藏 (观察仓)
 class FavoriteStock(models.Model):
     GROUPS = (('DEFAULT', '默认'), ('WATCH', '观察'), ('TOP', '龙头'))
     ts_code = models.CharField(max_length=20)
     group = models.CharField(max_length=20, choices=GROUPS, default='DEFAULT')
     add_time = models.DateTimeField(auto_now_add=True)
     notes = models.CharField(max_length=100, blank=True)
+
     class Meta: constraints = [models.UniqueConstraint(fields=['ts_code'], name='unique_fav_stock')]
 
+
+# 6. 交易记录 (升级版：支持条件单信息)
 class TradeRecord(models.Model):
     TRADE_TYPES = (('BUY', '买入'), ('SELL', '卖出'))
     ts_code = models.CharField(max_length=20)
@@ -52,20 +70,30 @@ class TradeRecord(models.Model):
     trade_type = models.CharField(max_length=10, choices=TRADE_TYPES)
     price = models.FloatField()
     volume = models.IntegerField(default=100)
-    strategy_name = models.CharField(max_length=50, default='手动')
-    pnl = models.FloatField(null=True, blank=True)
+
+    # 🔥 新增字段：记录条件单详情
+    strategy_name = models.CharField(max_length=50, default='手动交易')
+    trigger_condition = models.CharField(max_length=100, blank=True, verbose_name='触发条件')  # 例如 "价格>=20.5"
+    order_validity = models.CharField(max_length=20, default='day', verbose_name='有效期')
+
+    pnl = models.FloatField(null=True, blank=True, verbose_name='盈亏')
     create_time = models.DateTimeField(auto_now_add=True)
+
     class Meta: ordering = ['-create_time']
 
+
+# 7. 系统消息
 class SystemMessage(models.Model):
     title = models.CharField(max_length=100)
     content = models.TextField()
     related_code = models.CharField(max_length=20, null=True, blank=True)
     is_read = models.BooleanField(default=False)
     create_time = models.DateTimeField(auto_now_add=True)
+
     class Meta: ordering = ['-create_time']
 
-# 🔥 [新增] 用户策略模型
+
+# 8. 用户策略 (用于监控)
 class UserStrategy(models.Model):
     name = models.CharField(max_length=100, verbose_name='策略名称')
     criteria = models.JSONField(verbose_name='筛选条件', default=dict)
@@ -73,4 +101,5 @@ class UserStrategy(models.Model):
     monitor_freq = models.IntegerField(default=60)
     notify_msg = models.BooleanField(default=True)
     create_time = models.DateTimeField(auto_now_add=True)
+
     class Meta: ordering = ['-create_time']
