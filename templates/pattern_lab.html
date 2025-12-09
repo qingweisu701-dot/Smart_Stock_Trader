@@ -12,8 +12,8 @@
                         <el-radio-button label="kline">🧱 K线精调</el-radio-button>
                     </el-radio-group>
                     <div style="display:flex; gap:10px">
-                        <el-button v-if="mode==='mouse'" size="small" type="danger" plain @click="clearDraw">清空</el-button>
-                        <el-button type="primary" size="small" @click="saveDialog.visible=true">
+                        <el-button v-if="mode==='mouse'" size="small" type="danger" plain @click="clearDraw">清空画布</el-button>
+                        <el-button type="primary" size="small" @click="prepareSave">
                             <el-icon><check /></el-icon> 保存形态
                         </el-button>
                     </div>
@@ -21,33 +21,42 @@
             </template>
 
             <div v-show="mode==='mouse'" style="flex:1; display:flex; flex-direction:column">
-                <div class="tip-box">💡 按住左键绘制。松开不清除，可分段绘制。</div>
+                <div class="tip-box">
+                    💡 <b>趋势绘制：</b> 按住鼠标左键绘制。松开不清除，支持分段绘制。
+                </div>
                 <div id="draw-canvas" style="flex:1; border:1px dashed #ccc; min-height:400px; cursor:crosshair"></div>
             </div>
 
             <div v-show="mode==='kline'" style="height:100%; display:flex; flex-direction:column; overflow-y:auto">
-                <div class="tip-box">💡 点击下方 K 线柱体，使用滑块调整 OHLC 数值。</div>
+                <div class="tip-box">
+                    💡 <b>K线微调：</b> 点击图表中的 K 线柱体，在下方滑块调整【开/高/低/收】。滚轮可缩放。
+                </div>
                 <div id="kline-editor" style="height:350px; width:100%"></div>
 
-                <div v-if="selectedIdx !== null" style="background:#f9f9f9; padding:15px; margin-top:10px; border-radius:4px; border:1px solid #eee">
-                    <div style="font-weight:bold; margin-bottom:10px; color:#409EFF">
-                        调整第 [[selectedIdx+1]] 根 K线
-                        <el-tag size="small" :type="curr.close>=curr.open?'danger':'success'" style="margin-left:5px">
+                <div v-if="selectedIdx !== null" class="editor-bar">
+                    <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px">
+                        <span style="color:#409EFF">
+                            <el-icon><edit /></el-icon> 正在编辑第 [[selectedIdx+1]] 根
+                        </span>
+                        <el-tag size="small" :type="curr.close>=curr.open?'danger':'success'" style="margin-left:10px">
                             [[ curr.close>=curr.open ? '阳线' : '阴线' ]]
                         </el-tag>
                     </div>
                     <el-row :gutter="20">
-                        <el-col :span="6"><span class="label">最高价 High</span><el-slider v-model="curr.high" :max="100" @input="updateChart"/></el-col>
-                        <el-col :span="6"><span class="label">最低价 Low</span><el-slider v-model="curr.low" :max="100" @input="updateChart"/></el-col>
-                        <el-col :span="6"><span class="label">开盘价 Open</span><el-slider v-model="curr.open" :max="100" @input="updateChart"/></el-col>
-                        <el-col :span="6"><span class="label">收盘价 Close</span><el-slider v-model="curr.close" :max="100" @input="updateChart"/></el-col>
+                        <el-col :span="6"><span class="label">最高价</span><el-slider v-model="curr.high" :max="100" @input="updateChart"/></el-col>
+                        <el-col :span="6"><span class="label">最低价</span><el-slider v-model="curr.low" :max="100" @input="updateChart"/></el-col>
+                        <el-col :span="6"><span class="label">开盘价</span><el-slider v-model="curr.open" :max="100" @input="updateChart"/></el-col>
+                        <el-col :span="6"><span class="label">收盘价</span><el-slider v-model="curr.close" :max="100" @input="updateChart"/></el-col>
                     </el-row>
+                </div>
+                <div v-else style="text-align:center; color:#999; padding:20px; border:1px dashed #eee; margin-top:10px; border-radius:4px">
+                    👈 请点击上方图表中的任意一根 K 线进行调整
                 </div>
 
                 <div style="text-align:center; margin-top:10px">
                     <el-button-group>
-                        <el-button size="small" type="success" @click="addCandle"><el-icon><plus /></el-icon> 加一根</el-button>
-                        <el-button size="small" type="danger" @click="removeCandle" :disabled="selectedIdx===null"><el-icon><minus /></el-icon> 删选中</el-button>
+                        <el-button size="small" type="success" @click="addCandle"><el-icon><plus /></el-icon> 追加一根</el-button>
+                        <el-button size="small" type="danger" @click="removeCandle" :disabled="selectedIdx===null"><el-icon><minus /></el-icon> 删除选中</el-button>
                     </el-button-group>
                 </div>
             </div>
@@ -129,6 +138,7 @@
 {% block scripts %}
 <style>
     .tip-box { background:#e6f7ff; color:#1890ff; padding:8px 12px; font-size:12px; border-radius:4px; margin-bottom:10px; border:1px solid #91d5ff; }
+    .editor-bar { background:#fff; padding:15px; border:1px solid #dcdfe6; border-radius:6px; margin-top:5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .p-item { padding:10px; border-bottom:1px solid #f0f0f0; cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
     .p-item:hover{background:#f9f9f9}
     .label { font-size:12px; color:#909399; }
@@ -141,12 +151,14 @@
 </style>
 <script>
 function pageSetup() {
+    // 显式解构 API，防止未定义
     const { ref, onMounted, computed } = Vue;
 
     const mode = ref('mouse');
-    const activeCollapse = ref([]);
+    const activeCollapse = ref([]); // 默认闭合
     const list = ref({presets:[], users:[]});
 
+    // 计算属性 (修复 v-if 和 v-for 冲突)
     const buyPatterns = computed(() => list.value.presets.filter(p => p.type === 'BUY'));
     const sellPatterns = computed(() => list.value.presets.filter(p => p.type === 'SELL'));
     const userPatterns = computed(() => list.value.users);
@@ -199,6 +211,7 @@ function pageSetup() {
             tooltip:{trigger:'axis'}, grid:{top:20,bottom:30,left:30,right:10},
             xAxis:{data:klineData.value.map((_,i)=>i+1)},
             yAxis:{scale:true, min:0, max:100},
+            // 🔥 自适应关键：强制铺满
             dataZoom:[{type:'inside', start:0, end:100}],
             series:[{
                 type:'candlestick', data:d,
@@ -227,21 +240,21 @@ function pageSetup() {
     };
 
     const loadP = (p) => {
-        if (Array.isArray(p.data) && typeof p.data[0] === 'object' && 'open' in p.data[0]) {
+        if (p.source_type === 'KLINE') {
             mode.value = 'kline';
             klineData.value = p.data;
             setTimeout(renderKline, 100);
-            ElementPlus.ElMessage.success(`已加载: ${p.name}`);
+            ElementPlus.ElMessage.success(`已加载K线: ${p.name}`);
         } else {
             mode.value = 'mouse';
             drawPoints = p.data;
             setTimeout(renderDraw, 100);
-            ElementPlus.ElMessage.success(`已加载: ${p.name}`);
+            ElementPlus.ElMessage.success(`已加载趋势: ${p.name}`);
         }
     };
 
     const toggleFav = async (p, type) => {
-        await axios.post('/api/pattern/fav/toggle/', {id: p.id, type});
+        await axios.post('/api/pattern/fav/toggle/', {id: p.id, source_type: type});
         loadList();
         ElementPlus.ElMessage.success('操作成功');
     };
@@ -270,7 +283,6 @@ function pageSetup() {
 
         // 如果勾选收藏
         if (saveDialog.value.isFav) {
-             // 简单处理：提示用户去收藏
              ElementPlus.ElMessage.success('保存成功，请手动点击星号收藏');
         } else {
             ElementPlus.ElMessage.success('保存成功');

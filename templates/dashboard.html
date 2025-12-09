@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block title %}市场全景驾驶舱{% endblock %}
+
+{% block content %}
+<el-row :gutter="20">
+    <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+            <div class="card-title">📈 上证指数</div>
+            <div class="card-num" style="color:#F56C6C">3,285.42 <small>+0.5%</small></div>
+            <div class="card-desc">放量上涨，趋势向好</div>
+        </el-card>
+    </el-col>
+    <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+            <div class="card-title">🔥 市场热度</div>
+            <div class="card-num">[[ market.up_count ]] 家上涨</div>
+            <el-progress :percentage="70" color="#F56C6C" :show-text="false"></el-progress>
+            <div class="card-desc">下跌 [[ market.down_count ]] 家，多头占优</div>
+        </el-card>
+    </el-col>
+    <el-col :span="6">
+        <el-card shadow="hover" class="data-card">
+            <div class="card-title">💰 两市成交</div>
+            <div class="card-num">[[ market.volume ]]</div>
+            <div class="card-desc">较昨日缩量 500亿</div>
+        </el-card>
+    </el-col>
+    <el-col :span="6">
+        <el-card shadow="hover" class="data-card" style="background:#ecf5ff; cursor:pointer" @click="go('/api/pattern/lab/')">
+            <div class="card-title" style="color:#409EFF">🎨 快速创作</div>
+            <div class="card-num" style="font-size:20px; margin-top:10px">绘制新策略</div>
+            <div class="card-desc">点击进入图形实验室</div>
+        </el-card>
+    </el-col>
+</el-row>
+
+<el-row :gutter="20" style="margin-top:20px">
+    <el-col :span="16">
+        <el-card header="📊 市场核心趋势 (以上证为例)">
+            <div id="index-chart" style="height:400px"></div>
+        </el-card>
+    </el-col>
+
+    <el-col :span="8">
+        <el-card header="🚀 策略信号预警" style="height:460px">
+            <div style="margin-bottom:15px; color:#666; font-size:12px">今日触发您收藏形态的个股：</div>
+            <div class="signal-list">
+                <div class="signal-item" @click="go('/api/stock/detail/?code=600519.SH')">
+                    <el-tag size="small" type="danger">五浪上涨</el-tag>
+                    <span style="font-weight:bold; margin-left:10px">贵州茅台</span>
+                    <span style="float:right; color:#F56C6C">+2.1%</span>
+                </div>
+                <div class="signal-item">
+                    <el-tag size="small" type="success">头肩顶</el-tag>
+                    <span style="font-weight:bold; margin-left:10px">宁德时代</span>
+                    <span style="float:right; color:#67C23A">-1.5%</span>
+                </div>
+                <div class="signal-item">
+                    <el-tag size="small" type="warning">MACD金叉</el-tag>
+                    <span style="font-weight:bold; margin-left:10px">招商银行</span>
+                    <span style="float:right; color:#F56C6C">+0.8%</span>
+                </div>
+            </div>
+
+            <div style="margin-top:30px; text-align:center">
+                <el-button type="primary" plain style="width:100%" @click="go('/api/analysis/scan/')">进入全市场扫描</el-button>
+                <el-button type="success" plain style="width:100%; margin-top:10px; margin-left:0" @click="go('/api/decision/center/')">查看我的观察仓</el-button>
+            </div>
+        </el-card>
+    </el-col>
+</el-row>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .data-card { height: 120px; display: flex; flex-direction: column; justify-content: center; }
+    .card-title { font-size: 14px; color: #909399; margin-bottom: 5px; }
+    .card-num { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+    .card-desc { font-size: 12px; color: #C0C4CC; }
+    .signal-item { padding: 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: 0.2s; }
+    .signal-item:hover { background: #f9f9f9; }
+</style>
+<script>
+function pageSetup() {
+    const market = ref({up_count:0, down_count:0, volume:'--', hot_sector:'--'});
+
+    const init = async () => {
+        const res = await axios.get('/api/dashboard/data/');
+        market.value = res.data.data.market;
+        renderChart(res.data.data.index_chart);
+    };
+
+    const renderChart = (data) => {
+        const chart = echarts.init(document.getElementById('index-chart'));
+        chart.setOption({
+            tooltip: {trigger:'axis'},
+            grid: {top:20, bottom:30, left:40, right:20},
+            xAxis: {data: data.map(i=>i.trade_date)},
+            yAxis: {scale:true},
+            series: [{type:'line', data: data.map(i=>i.close_price), smooth:true, areaStyle:{opacity:0.1}, itemStyle:{color:'#409EFF'}}]
+        });
+    };
+
+    onMounted(init);
+    return { market };
+}
+</script>
+{% endblock %}

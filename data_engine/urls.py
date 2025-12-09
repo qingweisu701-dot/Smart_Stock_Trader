@@ -2,13 +2,16 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+# --- 0. 首页仪表盘 (新增) ---
+    path('dashboard/', views.page_dashboard, name='page_dashboard'),
+    path('dashboard/data/', views.api_dashboard_data, name='api_dashboard_data'),
     # 1. 图形管理
     path('pattern/lab/', views.page_pattern_lab, name='page_pattern'),
     path('pattern/list/', views.api_pattern_list, name='api_pattern_list'),
     path('pattern/save/', views.api_pattern_save, name='api_pattern_save'),
     path('pattern/delete/', views.api_pattern_delete, name='api_pattern_delete'),
     path('pattern/analyze/', views.api_analyze_pattern_trend, name='api_analyze_pattern_trend'),
-    # [新增] 形态收藏接口
+    path('pattern/verify/', views.api_pattern_quick_verify, name='api_pattern_quick_verify'),
     path('pattern/fav/toggle/', views.api_pattern_fav_toggle, name='api_pattern_fav_toggle'),
 
     # 2. 市场扫描
