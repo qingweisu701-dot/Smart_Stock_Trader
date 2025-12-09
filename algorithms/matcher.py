@@ -3,7 +3,7 @@ import pandas as pd
 from fastdtw import fastdtw
 from data_engine.models import StockDaily, StockBasic
 
-# 1. 形态库 (保持不变，数据完整)
+# 1. 形态库
 PRESET_PATTERNS = {
     'hammer_low': {'type': 'KLINE', 'signal': 'BUY', 'desc': '低位倒锤线',
                    'data': [{'open': 20, 'close': 25, 'low': 20, 'high': 60}]},
@@ -38,18 +38,17 @@ def normalize_series(series):
 
 def calculate_indicators(df):
     """
-    🔥 核心修复：强制保证所有指标列存在，防止 KeyError
+    🔥 核心修复：计算所有技术指标 (MA, MACD, KDJ, RSI)
     """
     # 必需列检查
     for col in ['close', 'open', 'high', 'low']:
         if col not in df.columns: return df
 
-    # 初始化目标列，防止因数据行数不足导致列缺失
+    # 初始化目标列
     target_cols = ['MA5', 'MA10', 'MA20', 'K', 'D', 'J', 'RSI', 'MACD', 'DIF', 'DEA']
     for col in target_cols:
         if col not in df.columns: df[col] = 0.0
 
-    # 至少需要一定数据量才能计算
     if len(df) < 2: return df
 
     # MA
@@ -101,7 +100,6 @@ def analyze_kline_signals(df):
 
 
 def run_analysis_core(target_pattern_data=None, filters=None):
-    # 保持原有的 DTW 匹配逻辑
     target_series = []
     has_pattern = False
 
