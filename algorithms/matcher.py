@@ -36,35 +36,37 @@ def normalize_series(series):
 
 
 def calculate_indicators(df):
-    """
-    🔥 安全计算：初始化所有指标列
-    """
+    # 必需列检查
     for col in ['close', 'open', 'high', 'low']:
         if col not in df.columns: return df
 
-    # 初始化为 0.0
-    for col in ['MA5', 'MA10', 'MA20', 'K', 'D', 'J', 'RSI', 'MACD', 'DIF', 'DEA']:
+    # 初始化目标列
+    target_cols = ['MA5','MA10','MA20','K','D','J','RSI','MACD','DIF','DEA']
+    for col in target_cols:
         if col not in df.columns: df[col] = 0.0
 
     if len(df) < 2: return df
 
-    # 计算逻辑
-    df['MA5'] = df['close'].rolling(5).mean().fillna(0.0)
-    df['MA10'] = df['close'].rolling(10).mean().fillna(0.0)
-    df['MA20'] = df['close'].rolling(20).mean().fillna(0.0)
+    # MA
+    df['MA5'] = df['close'].rolling(5).mean()
+    df['MA10'] = df['close'].rolling(10).mean()
+    df['MA20'] = df['close'].rolling(20).mean()
 
+    # MACD
     exp12 = df['close'].ewm(span=12, adjust=False).mean()
     exp26 = df['close'].ewm(span=26, adjust=False).mean()
     df['DIF'] = exp12 - exp26
     df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
     df['MACD'] = (df['DIF'] - df['DEA']) * 2
 
+    # RSI
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
+    # KDJ
     low_list = df['low'].rolling(9, min_periods=9).min()
     high_list = df['high'].rolling(9, min_periods=9).max()
     rsv = (df['close'] - low_list) / (high_list - low_list) * 100
@@ -72,9 +74,8 @@ def calculate_indicators(df):
     df['D'] = df['K'].ewm(com=2, adjust=False).mean()
     df['J'] = 3 * df['K'] - 2 * df['D']
 
-    return df.fillna(0.0)
 
-
+    return df.fillna(0)
 def analyze_kline_signals(df):
     signals = []
     if len(df) < 5: return signals
