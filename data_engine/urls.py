@@ -13,6 +13,7 @@ urlpatterns = [
     path('pattern/analyze/', views.api_analyze_pattern_trend, name='api_analyze_pattern_trend'),
     path('pattern/verify/', views.api_pattern_quick_verify, name='api_pattern_quick_verify'),
     path('pattern/fav/toggle/', views.api_pattern_fav_toggle, name='api_pattern_fav_toggle'),
+path('favorite/delete/', views.api_fav_delete, name='api_fav_delete'),
 
     # 2. 市场扫描
     path('analysis/scan/', views.page_analysis_scan, name='page_analysis_scan'),

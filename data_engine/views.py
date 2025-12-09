@@ -173,7 +173,16 @@ def api_pattern_list(request):
         print(e)
         return JsonResponse({'code': 500, 'msg': str(e)})
 
-
+@csrf_exempt
+def api_fav_delete(request):
+    """【补充】删除自选股"""
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            FavoriteStock.objects.filter(ts_code=body['code']).delete()
+            return JsonResponse({'code': 200, 'msg': '已移除'})
+        except: return JsonResponse({'code': 500})
+    return JsonResponse({'code': 405})
 @csrf_exempt
 def api_analyze_pattern_trend(request):
     """

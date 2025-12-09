@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}我的观察仓{% endblock %}
+
+{% block content %}
+<el-card class="box-card" style="min-height: 85vh;">
+    <template #header>
+        <div style="display:flex; justify-content:space-between; align-items:center">
+            <span>⭐ 我的观察仓 (My Watchlist)</span>
+            <el-button type="primary" size="small" @click="goScan">
+                <el-icon><search /></el-icon> 去筛选新股
+            </el-button>
+        </div>
+    </template>
+
+    <div v-if="favList.length > 0">
+        <el-table :data="favList" stripe style="width: 100%" border>
+            <el-table-column prop="code" label="代码" width="120" sortable>
+                <template #default="scope">
+                    <el-tag size="small" type="info">[[ scope.row.code ]]</el-tag>
+                </template>
+            </el-table-column>
+
+            <el-table-column prop="name" label="名称" width="150" sortable>
+                <template #default="scope">
+                    <b>[[ scope.row.name ]]</b>
+                </template>
+            </el-table-column>
+
+            <el-table-column prop="group" label="分组" width="120">
+                <template #default="scope">
+                    <el-tag :type="scope.row.group==='TOP'?'danger':(scope.row.group==='WATCH'?'warning':'')">
+                        [[ scope.row.group || '默认' ]]
+                    </el-tag>
+                </template>
+            </el-table-column>
+
+            <el-table-column label="快捷操作">
+                <template #default="scope">
+                    <el-button-group>
+                        <el-button size="small" type="primary" plain @click="showDetail(scope.row)">
+                            <el-icon><data-line /></el-icon> 详情
+                        </el-button>
+                        <el-button size="small" type="success" plain @click="toPredict(scope.row)">
+                            <el-icon><cpu /></el-icon> AI预测
+                        </el-button>
+                        <el-button size="small" type="danger" plain @click="removeFav(scope.row)">
+                            <el-icon><delete /></el-icon> 移除
+                        </el-button>
+                    </el-button-group>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <div v-else style="text-align:center; padding:50px; color:#909399">
+        <el-icon size="60"><star /></el-icon>
+        <p style="margin-top:20px">暂无收藏的股票</p>
+        <el-button type="primary" plain @click="goScan">立即去筛选</el-button>
+    </div>
+</el-card>
+
+<el-dialog v-model="detailVisible" width="80%" title="个股详情" @opened="renderChart">
+    <div id="kline-chart" style="height:500px"></div>
+</el-dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function pageSetup() {
+    const { ref, onMounted } = Vue;
+    const favList = ref([]);
+    const detailVisible = ref(false);
+    const currCode = ref('');
+    let chart = null;
+
+    // 1. 加载收藏列表
+    const loadList = async () => {
+        try {
+            const res = await axios.get('/api/favorite/list/');
+            favList.value = res.data.data;
+        } catch(e) {
+            ElementPlus.ElMessage.error('加载失败');
+        }
+    };
+
+    // 2. 跳转去筛选
+    const goScan = () => {
+        window.location.href = '/api/analysis/scan/';
+    };
+
+    // 3. 跳转去预测 (带参数)
+    const toPredict = (row) => {
+        // 这里的逻辑是跳转到预测页，并自动填入代码
+        // 由于我们是单页应用逻辑，可以通过 localStorage 传参或者 URL 传参
+        // 这里简单使用 URL 传参，需要在 prediction_ai.html 里解析
+        window.location.href = `/api/prediction/ai/?code=${row.code}`;
+    };
+
+    // 4. 移除收藏 (调用 add 接口的变体或者新增 remove 接口，这里复用 add 逻辑需后端支持 toggle，或者我们直接调 add 但后端逻辑如果是 toggle 就好了)
+    // 为了稳妥，我们假设后端 api_fav_add 是“添加/更新”，这里我们建议在 views.py 加一个 remove 接口，
+    // 或者我们直接用 toggle 逻辑?
+    // 既然你之前没有 remove 接口，我们临时用一个逻辑：重新调 add 可能会重复。
+    // 建议：直接在 views.py 补一个 delete 逻辑，或者前端假装移除（不推荐）。
+    // 最佳方案：我假设你已经在 urls.py 里配了 favorite/add，我们去 views.py 确认一下逻辑。
+    // 修正：我们直接调用 add，但之前的逻辑是 get_or_create。
+    // 为了不改后端，我们这里先留空，或者你可以去 views.py 加一个 api_fav_remove。
+    // 既然要补全，我给你写一个通用的移除逻辑 (需后端支持，这里先用 add 顶替，实际应该去后端加 delete)
+    const removeFav = async (row) => {
+    await axios.post('/api/favorite/delete/', {code: row.code});
+    loadList(); // 刷新列表
+    ElementPlus.ElMessage.success('已移除');
+};
+
+    // 5. 查看详情 (渲染 K 线)
+    const showDetail = (row) => {
+        currCode.value = row.code;
+        detailVisible.value = true;
+    };
+
+    const renderChart = async () => {
+        const res = await axios.get(`/api/stock/detail/?code=${currCode.value}`);
+        const d = res.data.data;
+        if(chart) chart.dispose();
+        chart = echarts.init(document.getElementById('kline-chart'));
+
+        // 简单渲染，不带复杂信号，主要看走势
+        chart.setOption({
+            tooltip: {trigger:'axis', axisPointer:{type:'cross'}},
+            xAxis: {data: d.dates},
+            yAxis: {scale:true},
+            dataZoom: [{type:'inside'}],
+            series: [
+                {
+                    type: 'candlestick',
+                    data: d.values,
+                    itemStyle: {color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}
+                },
+                { name:'MA5', type:'line', data:d.mas.MA5, smooth:true, lineStyle:{opacity:0.5} }
+            ]
+        });
+    };
+
+    onMounted(loadList);
+
+    return { favList, detailVisible, goScan, toPredict, removeFav, showDetail, renderChart };
+}
+</script>
+{% endblock %}
