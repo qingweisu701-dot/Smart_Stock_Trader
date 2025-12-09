@@ -1,6 +1,5 @@
 from django.db import models
 
-# ... (StockBasic, StockDaily 保持不变) ...
 class StockBasic(models.Model):
     ts_code = models.CharField(max_length=20, verbose_name='股票代码', primary_key=True)
     name = models.CharField(max_length=20, verbose_name='股票名称')
@@ -23,7 +22,6 @@ class StockDaily(models.Model):
         indexes = [models.Index(fields=['ts_code', 'trade_date'])]
         constraints = [models.UniqueConstraint(fields=['ts_code', 'trade_date'], name='unique_stock_date')]
 
-# ... (UserPattern 保持不变) ...
 class UserPattern(models.Model):
     PATTERN_TYPES = (('DRAW', '趋势手绘'), ('KLINE', 'K线构造'))
     name = models.CharField(max_length=50)
@@ -33,18 +31,12 @@ class UserPattern(models.Model):
     create_time = models.DateTimeField(auto_now_add=True)
     class Meta: ordering = ['-create_time']
 
-# 🔥 [新增] 模板收藏表
 class PatternFavorite(models.Model):
-    # 收藏的对象可以是系统的(PRESET:xxx) 也可以是用户的(USER:123)
-    pattern_id = models.CharField(max_length=50, verbose_name='形态ID')
-    pattern_type = models.CharField(max_length=20, default='PRESET') # PRESET 或 USER
+    pattern_id = models.CharField(max_length=50)
+    pattern_type = models.CharField(max_length=20, default='PRESET')
     add_time = models.DateTimeField(auto_now_add=True)
+    class Meta: constraints = [models.UniqueConstraint(fields=['pattern_id', 'pattern_type'], name='unique_fav_pattern')]
 
-    class Meta:
-        verbose_name = '形态收藏'
-        constraints = [models.UniqueConstraint(fields=['pattern_id', 'pattern_type'], name='unique_fav_pattern')]
-
-# ... (FavoriteStock, TradeRecord, SystemMessage 保持不变) ...
 class FavoriteStock(models.Model):
     GROUPS = (('DEFAULT', '默认'), ('WATCH', '观察'), ('TOP', '龙头'))
     ts_code = models.CharField(max_length=20)
@@ -70,5 +62,15 @@ class SystemMessage(models.Model):
     content = models.TextField()
     related_code = models.CharField(max_length=20, null=True, blank=True)
     is_read = models.BooleanField(default=False)
+    create_time = models.DateTimeField(auto_now_add=True)
+    class Meta: ordering = ['-create_time']
+
+# 🔥 [新增] 用户策略模型
+class UserStrategy(models.Model):
+    name = models.CharField(max_length=100, verbose_name='策略名称')
+    criteria = models.JSONField(verbose_name='筛选条件', default=dict)
+    is_monitoring = models.BooleanField(default=False, verbose_name='是否监控')
+    monitor_freq = models.IntegerField(default=60)
+    notify_msg = models.BooleanField(default=True)
     create_time = models.DateTimeField(auto_now_add=True)
     class Meta: ordering = ['-create_time']

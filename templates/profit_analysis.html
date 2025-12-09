@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}收益分析{% endblock %}
+{% block content %}
+<el-row :gutter="20">
+    <el-col :span="24">
+        <el-card>
+            <template #header><span>💰 历史收益与回测分析</span></template>
+            <div style="height: 400px; display: flex; justify-content: center; align-items: center; color: #999;">
+                (此处展示资金曲线、月度收益热力图、最大回撤等专业报表)
+                <br>开发中...
+            </div>
+        </el-card>
+    </el-col>
+</el-row>
+{% endblock %}

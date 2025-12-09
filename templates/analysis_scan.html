@@ -1,77 +1,181 @@
 {% extends 'base.html' %}
 {% block title %}市场智能扫描{% endblock %}
 {% block content %}
-<el-container style="height:85vh; border:1px solid #eee">
-    <el-aside width="320px" style="padding:15px; background:#fff; overflow-y:auto">
-        <h3>🔍 智能筛选</h3>
+<el-container style="height:85vh; border:1px solid #eee; background:#fff">
+    <el-aside width="340px" style="padding:15px; border-right:1px solid #eee; overflow-y:auto">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+            <h3 style="margin:0"><el-icon><Filter /></el-icon> 专业筛选</h3>
+            <el-button type="success" size="small" plain @click="goProfitAnalysis">
+                <el-icon><Trend-Charts /></el-icon> 收益分析
+            </el-button>
+        </div>
+
         <el-form label-position="top">
-            <el-form-item label="1. 形态匹配">
-                <el-select v-model="filters.patternId" placeholder="选择形态" clearable style="width:100%">
-                    <el-option-group label="经典形态"><el-option v-for="p in presets.sys" :key="p.id" :label="p.name" :value="'PRESET:'+p.id"/></el-option-group>
-                    <el-option-group label="我的模板"><el-option v-for="p in presets.user" :key="p.id" :label="p.name" :value="'USER:'+p.id"/></el-option-group>
-                </el-select>
-            </el-form-item>
+            <el-collapse v-model="activeNames">
+                <el-collapse-item title="📊 形态与基本面" name="1">
+                    <el-form-item label="形态匹配">
+                        <el-select v-model="filters.patternId" placeholder="选择形态" clearable style="width:100%">
+                            <el-option-group label="预设形态"><el-option v-for="p in presets.sys" :key="p.id" :label="p.name" :value="'PRESET:'+p.id"/></el-option-group>
+                            <el-option-group label="我的模板"><el-option v-for="p in presets.user" :key="p.id" :label="p.name" :value="'USER:'+p.id"/></el-option-group>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="市值规模">
+                        <el-radio-group v-model="filters.marketCap" size="small">
+                            <el-radio-button label="">全部</el-radio-button>
+                            <el-radio-button label="LARGE">大盘</el-radio-button>
+                            <el-radio-button label="SMALL">小盘</el-radio-button>
+                        </el-radio-group>
+                    </el-form-item>
+                </el-collapse-item>
 
-            <el-form-item label="2. 价格区间 (OHLC)">
-                <el-row :gutter="5"><el-col :span="12"><el-input v-model="filters.minOpen" placeholder="开盘Min"/></el-col><el-col :span="12"><el-input v-model="filters.maxOpen" placeholder="Max"/></el-input></el-col></el-row>
-                <el-row :gutter="5" style="margin-top:5px"><el-col :span="12"><el-input v-model="filters.minClose" placeholder="收盘Min"/></el-col><el-col :span="12"><el-input v-model="filters.maxClose" placeholder="Max"/></el-input></el-col></el-row>
-            </el-form-item>
+                <el-collapse-item title="⚡ 网格与监控条件" name="2">
+                    <el-form-item label="股价监控 (元)">
+                        <el-row :gutter="5">
+                            <el-col :span="12"><el-input v-model="filters.priceBreak" placeholder="突破价"></el-input></el-col>
+                            <el-col :span="12"><el-input v-model="filters.priceFall" placeholder="回落价"></el-input></el-col>
+                        </el-row>
+                    </el-form-item>
+                    <el-form-item label="日涨跌幅 (%)">
+                        <el-slider v-model="filters.dailyChange" range :min="-10" :max="10"></el-slider>
+                    </el-form-item>
+                    <el-form-item label="网格策略">
+                        <el-checkbox-group v-model="filters.gridConditions">
+                            <el-checkbox label="grid_buy">网格买入</el-checkbox>
+                            <el-checkbox label="grid_sell">网格卖出</el-checkbox>
+                        </el-checkbox-group>
+                    </el-form-item>
+                </el-collapse-item>
 
-            <el-form-item label="3. 市值规模">
-                <el-radio-group v-model="filters.marketCap" size="small">
-                    <el-radio-button label="">全部</el-radio-button>
-                    <el-radio-button label="LARGE">大(>200亿)</el-radio-button>
-                    <el-radio-button label="SMALL">小(<50亿)</el-radio-button>
-                </el-radio-group>
-            </el-form-item>
+                <el-collapse-item title="📈 指标信号" name="3">
+                    <el-form-item label="均线系统">
+                        <el-checkbox-group v-model="filters.strategies">
+                            <el-checkbox label="MA_GOLD">均线金叉</el-checkbox>
+                            <el-checkbox label="PRICE_UP_MA20">站上20日线</el-checkbox>
+                        </el-checkbox-group>
+                    </el-form-item>
+                    <el-form-item label="MACD形态">
+                        <el-checkbox-group v-model="filters.strategies">
+                            <el-checkbox label="MACD_GOLD">MACD金叉</el-checkbox>
+                            <el-checkbox label="MACD_BOTTOM">底背离</el-checkbox>
+                        </el-checkbox-group>
+                    </el-form-item>
+                </el-collapse-item>
+            </el-collapse>
 
-            <el-form-item label="4. 策略指标">
-                <el-checkbox-group v-model="filters.strategies">
-                    <el-checkbox label="MA_GOLD">均线金叉</el-checkbox>
-                    <el-checkbox label="MACD_GOLD">MACD金叉</el-checkbox>
-                </el-checkbox-group>
-            </el-form-item>
-
-            <el-button type="primary" style="width:100%" @click="runScan" :loading="loading">开始扫描</el-button>
+            <div style="margin-top:20px; display:flex; gap:10px">
+                <el-button type="primary" style="flex:1" @click="runScan" :loading="loading">开始扫描</el-button>
+                <el-button type="warning" plain icon="Star" @click="saveStrategyDialog=true">保存策略</el-button>
+            </div>
         </el-form>
     </el-aside>
 
     <el-main>
-        <el-table :data="results" stripe border @row-click="showDetail" style="cursor:pointer">
-            <el-table-column prop="code" label="代码" width="100"></el-table-column>
-            <el-table-column prop="name" label="名称" width="120"></el-table-column>
-            <el-table-column label="建议">
-                <template #default="s">
-                    <el-tag :type="s.row.match_type==='BUY'?'danger':'success'" effect="dark">[[s.row.match_type]]</el-tag>
-                </template>
-            </el-table-column>
-            <el-table-column label="置信度" width="180">
-                <template #default="s"><el-progress :percentage="s.row.confidence"/></template>
-            </el-table-column>
-            <el-table-column prop="price" label="现价"></el-table-column>
-            <el-table-column label="操作">
-                <template #default="s"><el-button size="small" @click.stop="addFav(s.row)">收藏</el-button></template>
-            </el-table-column>
-        </el-table>
+        <div v-if="results.length > 0">
+            <el-alert :title="`扫描完成，共 ${results.length} 条结果`" type="success" :closable="false" style="margin-bottom:10px"/>
+            <el-table :data="results" stripe border height="calc(100vh - 150px)" @row-click="showDetail" style="cursor:pointer">
+                <el-table-column prop="code" label="代码" width="90"></el-table-column>
+                <el-table-column prop="name" label="名称" width="100"></el-table-column>
+                <el-table-column label="信号" width="100">
+                    <template #default="s"><el-tag :type="s.row.match_type==='BUY'?'danger':'success'" size="small">[[s.row.match_type]]</el-tag></template>
+                </el-table-column>
+                <el-table-column label="潜在买/卖点" width="140">
+                    <template #default="s">
+                        <div style="font-size:12px">
+                            <span style="color:#F56C6C">买: [[s.row.buy_point]]</span><br>
+                            <span style="color:#67C23A">卖: [[s.row.sell_point]]</span>
+                        </div>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="holding_period" label="建议周期" width="100"></el-table-column>
+                <el-table-column label="置信度" width="150">
+                    <template #default="s"><el-progress :percentage="s.row.confidence" :color="s.row.confidence>80?'#F56C6C':'#E6A23C'"/></template>
+                </el-table-column>
+                <el-table-column label="操作" width="180" fixed="right">
+                    <template #default="s">
+                        <el-button size="small" type="primary" @click.stop="openTrade(s.row)">条件单</el-button>
+                        <el-button size="small" @click.stop="addFav(s.row)">收藏</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <el-empty v-else description="请配置左侧策略进行扫描"></el-empty>
     </el-main>
 </el-container>
 
-<el-dialog v-model="detailVisible" width="80%" title="走势详情" @opened="renderDetail">
+<el-dialog v-model="detailVisible" width="80%" title="走势详情" @opened="renderDetailChart">
     <div id="detail-chart" style="height:500px"></div>
+</el-dialog>
+
+<el-dialog v-model="trade.visible" title="新建条件单" width="35%">
+    <el-form label-position="top">
+        <el-alert title="风险提示：条件单触发后将自动提交委托" type="info" :closable="false" style="margin-bottom:15px"/>
+        <el-form-item label="监控标的">
+            <el-tag type="info">[[trade.name]] ([[trade.code]])</el-tag>
+        </el-form-item>
+        <el-row :gutter="20">
+            <el-col :span="12">
+                <el-form-item label="买卖方向">
+                    <el-radio-group v-model="trade.type" size="small">
+                        <el-radio-button label="BUY">买入</el-radio-button>
+                        <el-radio-button label="SELL">卖出</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="有效期">
+                    <el-select v-model="trade.valid" size="small">
+                        <el-option label="当日有效" value="day"></el-option>
+                        <el-option label="永久有效" value="forever"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-col>
+        </el-row>
+        <el-form-item label="触发条件">
+            <el-radio-group v-model="trade.conditionType" size="small" style="margin-bottom:10px">
+                <el-radio-button label="price">价格</el-radio-button>
+                <el-radio-button label="percent">涨跌幅</el-radio-button>
+                <el-radio-button label="macd">MACD形态</el-radio-button>
+            </el-radio-group>
+            <el-input v-model="trade.triggerValue" placeholder="请输入触发数值"><template #prepend>[[trade.conditionType==='price'?'≥':'数值']]</template></el-input>
+        </el-form-item>
+        <el-form-item label="委托设置">
+            <el-row :gutter="10">
+                <el-col :span="12"><el-input v-model="trade.price" placeholder="委托价格"><template #prepend>价格</template></el-input></el-col>
+                <el-col :span="12"><el-input v-model="trade.volume" placeholder="数量"><template #prepend>股数</template></el-input></el-col>
+            </el-row>
+        </el-form-item>
+    </el-form>
+    <template #footer><el-button @click="trade.visible=false">取消</el-button><el-button type="danger" @click="submitTrade">提交条件单</el-button></template>
+</el-dialog>
+
+<el-dialog v-model="saveStrategyDialog" title="保存个性化策略" width="30%">
+    <el-form>
+        <el-form-item label="策略名称"><el-input v-model="strategyName" placeholder="例如：我的低吸策略"/></el-form-item>
+        <el-form-item label="实时监控">
+            <el-switch v-model="monitorEnabled" active-text="开启实时监控" inactive-text="仅保存"></el-switch>
+        </el-form-item>
+        <div style="font-size:12px; color:#666">开启监控后，系统将实时扫描，触发时推送消息。</div>
+    </el-form>
+    <template #footer><el-button type="primary" @click="doSaveStrategy">保存</el-button></template>
 </el-dialog>
 {% endblock %}
 
 {% block scripts %}
 <script>
 function pageSetup() {
-    const loading=ref(false);
-    const filters=ref({patternId:'', strategies:[], minOpen:'', maxOpen:'', minClose:'', maxClose:'', marketCap:''});
-    const presets=ref({sys:[], user:[]});
-    const results=ref([]);
-
-    const detailVisible=ref(false);
-    const currCode=ref('');
-    let chart=null;
+    const { ref, onMounted } = Vue;
+    const loading = ref(false);
+    const activeNames = ref(['1', '2', '3']);
+    const filters = ref({ patternId:'', marketCap:'', strategies:[], priceBreak:'', priceFall:'', dailyChange:[-5, 5], gridConditions:[] });
+    const presets = ref({sys:[], user:[]});
+    const results = ref([]);
+    const detailVisible = ref(false);
+    const trade = ref({ visible:false, code:'', name:'', type:'BUY', price:0, volume:100, valid:'day', conditionType:'price', triggerValue:'' });
+    const saveStrategyDialog = ref(false);
+    const strategyName = ref('');
+    const monitorEnabled = ref(false);
+    const currCode = ref('');
+    let chart = null;
 
     const init = async () => {
         const res = await axios.get('/api/pattern/list/');
@@ -80,51 +184,46 @@ function pageSetup() {
     };
 
     const runScan = async () => {
-        loading.value=true;
+        loading.value = true;
         try {
             let pData = null;
             if(filters.value.patternId) {
                 const [src, id] = filters.value.patternId.split(':');
-                const list = src==='PRESET'?presets.value.sys:presets.value.user;
+                const list = src==='PRESET' ? presets.value.sys : presets.value.user;
                 pData = list.find(x=>x.id==id).data;
             }
-            const res = await axios.post('/api/analysis/run/', {pattern_data:pData, filters:filters.value});
+            const res = await axios.post('/api/analysis/run/', { pattern_data: pData, filters: filters.value });
             results.value = res.data.data;
-        } finally { loading.value=false; }
+            if(results.value.length === 0) ElementPlus.ElMessage.warning('未找到符合条件的股票');
+        } finally { loading.value = false; }
     };
 
-    const showDetail = (row) => { currCode.value=row.code; detailVisible.value=true; };
-    const renderDetail = async () => {
+    const goProfitAnalysis = () => window.location.href = '/api/analysis/profit/';
+
+    const doSaveStrategy = async () => {
+        if(!strategyName.value) return ElementPlus.ElMessage.warning('请输入名称');
+        await axios.post('/api/strategy/save/', { name: strategyName.value, filters: filters.value, monitor: monitorEnabled.value });
+        saveStrategyDialog.value = false; ElementPlus.ElMessage.success('策略已保存');
+    };
+
+    const showDetail = (row) => { currCode.value = row.code; detailVisible.value = true; };
+    const renderDetailChart = async () => {
         const res = await axios.get(`/api/stock/detail/?code=${currCode.value}`);
         const d = res.data.data;
         if(chart) chart.dispose();
         chart = echarts.init(document.getElementById('detail-chart'));
-
-        // 仿东方财富 Tooltip
-        const formatter = (params) => {
-            let s = params[0].name + '<br/>';
-            for(let p of params) {
-                if(p.seriesName==='K线') {
-                    s += `开:${p.data[1]} 收:${p.data[2]} 低:${p.data[3]} 高:${p.data[4]}<br/>`;
-                } else s += `${p.seriesName}: ${p.value}<br/>`;
-            }
-            return s;
-        };
-
         chart.setOption({
-            tooltip:{trigger:'axis', formatter}, legend:{data:['K线','MA5','MA20']},
-            xAxis:{data:d.dates}, yAxis:{scale:true}, dataZoom:[{type:'inside'}],
-            series:[
-                {name:'K线', type:'candlestick', data:d.values, itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
-                {name:'MA5', type:'line', data:d.mas.MA5, smooth:true},
-                {name:'MA20', type:'line', data:d.mas.MA20, smooth:true}
-            ]
+            tooltip:{trigger:'axis'}, xAxis:{data:d.dates}, yAxis:{scale:true},
+            series:[{type:'candlestick', data:d.values, itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}}]
         });
     };
 
+    const openTrade = (row) => { trade.value.visible=true; trade.value.code=row.code; trade.value.name=row.name; trade.value.price=row.price; };
+    const submitTrade = async () => { await axios.post('/api/trade/order/', trade.value); trade.value.visible=false; ElementPlus.ElMessage.success('条件单提交成功'); };
     const addFav = async (row) => { await axios.post('/api/favorite/add/', {code:row.code}); ElementPlus.ElMessage.success('已收藏'); };
+
     onMounted(init);
-    return { loading, filters, presets, results, runScan, showDetail, detailVisible, renderDetail, addFav };
+    return { loading, activeNames, filters, presets, results, detailVisible, trade, saveStrategyDialog, strategyName, monitorEnabled, runScan, goProfitAnalysis, doSaveStrategy, showDetail, renderDetailChart, openTrade, submitTrade, addFav };
 }
 </script>
 {% endblock %}

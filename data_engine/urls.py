@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # 0. 仪表盘
+    # 0. 首页
     path('dashboard/', views.page_dashboard, name='page_dashboard'),
     path('dashboard/data/', views.api_dashboard_data, name='api_dashboard_data'),
 
@@ -13,13 +13,18 @@ urlpatterns = [
     path('pattern/delete/', views.api_pattern_delete, name='api_pattern_delete'),
     path('pattern/analyze/', views.api_analyze_pattern_trend, name='api_analyze_pattern_trend'),
     path('pattern/fav/toggle/', views.api_pattern_fav_toggle, name='api_pattern_fav_toggle'),
-    # 🔥 [找回] 验证接口
     path('pattern/verify/', views.api_pattern_quick_verify, name='api_pattern_quick_verify'),
 
-    # 2. 扫描
+    # 2. 市场分析 (升级)
     path('analysis/scan/', views.page_analysis_scan, name='page_analysis_scan'),
-    path('analysis/fav/', views.page_analysis_fav, name='page_analysis_fav'),
+    path('analysis/profit/', views.page_profit_analysis, name='page_profit_analysis'),  # 🔥 新增：收益分析
     path('analysis/run/', views.api_run_analysis, name='api_run_analysis'),
+    path('analysis/fav/', views.page_analysis_fav, name='page_analysis_fav'),
+
+    # 🔥 新增：策略管理
+    path('strategy/save/', views.api_save_strategy, name='api_save_strategy'),
+    path('strategy/list/', views.api_list_strategies, name='api_list_strategies'),
+    path('strategy/toggle_monitor/', views.api_toggle_strategy_monitor, name='api_toggle_strategy_monitor'),
 
     # 3. 决策
     path('decision/center/', views.page_decision_center, name='page_decision_center'),
