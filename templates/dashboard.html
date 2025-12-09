@@ -2,107 +2,211 @@
 {% block title %}市场全景驾驶舱{% endblock %}
 
 {% block content %}
-<el-row :gutter="20">
+<el-row :gutter="15">
     <el-col :span="6">
-        <el-card shadow="hover" class="data-card">
-            <div class="card-title">📈 上证指数</div>
-            <div class="card-num" style="color:#F56C6C">3,285.42 <small>+0.5%</small></div>
-            <div class="card-desc">放量上涨，趋势向好</div>
+        <el-card shadow="hover" class="metric-card">
+            <div class="label">📈 [[ currentSnapshot.name ]]</div>
+            <div class="value" :class="currentSnapshot.is_up ? 'red' : 'green'">
+                [[ currentSnapshot.price ]]
+                <small>[[ currentSnapshot.change ]]</small>
+            </div>
+            <div class="sub">成交额: [[ currentSnapshot.volume ]]</div>
         </el-card>
     </el-col>
     <el-col :span="6">
-        <el-card shadow="hover" class="data-card">
-            <div class="card-title">🔥 市场热度</div>
-            <div class="card-num">[[ market.up_count ]] 家上涨</div>
-            <el-progress :percentage="70" color="#F56C6C" :show-text="false"></el-progress>
-            <div class="card-desc">下跌 [[ market.down_count ]] 家，多头占优</div>
+        <el-card shadow="hover" class="metric-card">
+            <div class="label">🔥 市场情绪</div>
+            <div class="value">[[market.up_count]] 家上涨</div>
+            <el-progress :percentage="60" color="#F56C6C" :show-text="false"></el-progress>
+            <div class="sub">[[market.down_count]] 家下跌 | 热门: [[market.hot_sector]]</div>
         </el-card>
     </el-col>
     <el-col :span="6">
-        <el-card shadow="hover" class="data-card">
-            <div class="card-title">💰 两市成交</div>
-            <div class="card-num">[[ market.volume ]]</div>
-            <div class="card-desc">较昨日缩量 500亿</div>
+        <el-card shadow="hover" class="metric-card">
+            <div class="label">💰 资金流向</div>
+            <div class="value red">+32.5亿 <small>北向</small></div>
+            <div class="sub">主力净流: -15.2亿</div>
         </el-card>
     </el-col>
     <el-col :span="6">
-        <el-card shadow="hover" class="data-card" style="background:#ecf5ff; cursor:pointer" @click="go('/api/pattern/lab/')">
-            <div class="card-title" style="color:#409EFF">🎨 快速创作</div>
-            <div class="card-num" style="font-size:20px; margin-top:10px">绘制新策略</div>
-            <div class="card-desc">点击进入图形实验室</div>
+        <el-card shadow="hover" class="metric-card action" @click="go('/api/pattern/lab/')">
+            <div class="label" style="color:#409EFF">🎨 策略实验室</div>
+            <div class="value" style="font-size:18px">绘制新策略 ></div>
+            <div class="sub">自定义形态 / K线组合</div>
         </el-card>
     </el-col>
 </el-row>
 
 <el-row :gutter="20" style="margin-top:20px">
-    <el-col :span="16">
-        <el-card header="📊 市场核心趋势 (以上证为例)">
-            <div id="index-chart" style="height:400px"></div>
+    <el-col :span="18">
+        <el-card>
+            <template #header>
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <span>📊 核心指数趋势 (三窗联动)</span>
+                    <el-select v-model="indexType" placeholder="选择指数" size="small" style="width:150px" @change="loadData">
+                        <el-option label="上证指数" value="000001.SH"></el-option>
+                        <el-option label="深证成指" value="399001.SZ"></el-option>
+                        <el-option label="创业板指" value="399006.SZ"></el-option>
+                        <el-option label="沪深300" value="000300.SH"></el-option>
+                        <el-option label="科创50" value="000688.SH"></el-option>
+                    </el-select>
+                </div>
+            </template>
+            <div id="main-chart" style="height:500px"></div>
         </el-card>
     </el-col>
 
-    <el-col :span="8">
-        <el-card header="🚀 策略信号预警" style="height:460px">
-            <div style="margin-bottom:15px; color:#666; font-size:12px">今日触发您收藏形态的个股：</div>
-            <div class="signal-list">
-                <div class="signal-item" @click="go('/api/stock/detail/?code=600519.SH')">
-                    <el-tag size="small" type="danger">五浪上涨</el-tag>
-                    <span style="font-weight:bold; margin-left:10px">贵州茅台</span>
-                    <span style="float:right; color:#F56C6C">+2.1%</span>
-                </div>
-                <div class="signal-item">
-                    <el-tag size="small" type="success">头肩顶</el-tag>
-                    <span style="font-weight:bold; margin-left:10px">宁德时代</span>
-                    <span style="float:right; color:#67C23A">-1.5%</span>
-                </div>
-                <div class="signal-item">
-                    <el-tag size="small" type="warning">MACD金叉</el-tag>
-                    <span style="font-weight:bold; margin-left:10px">招商银行</span>
-                    <span style="float:right; color:#F56C6C">+0.8%</span>
-                </div>
+    <el-col :span="6">
+        <el-card header="🚀 实时信号预警" style="height:540px; overflow-y:auto">
+            <div v-for="item in signals" :key="item.code" class="signal-item" @click="showSignalDetail(item)">
+                <div class="s-head"><span>[[item.name]]</span> <el-tag size="small" type="danger">[[item.pattern]]</el-tag></div>
+                <div class="s-info">[[item.code]] <span class="red">[[item.change]]%</span></div>
             </div>
-
-            <div style="margin-top:30px; text-align:center">
+            <div style="margin-top:20px; text-align:center">
                 <el-button type="primary" plain style="width:100%" @click="go('/api/analysis/scan/')">进入全市场扫描</el-button>
-                <el-button type="success" plain style="width:100%; margin-top:10px; margin-left:0" @click="go('/api/decision/center/')">查看我的观察仓</el-button>
             </div>
         </el-card>
     </el-col>
 </el-row>
+
+<el-dialog v-model="detailVisible" width="85%" title="个股深度分析" @opened="renderDetailChart">
+    <div style="display:flex; gap:20px">
+        <div style="flex:3">
+            <div id="detail-kline" style="height:450px"></div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:15px">
+            <div class="info-box">
+                <h4>📊 基本面概况</h4>
+                <p>行业：<b>[[stockInfo.basic?.industry]]</b></p>
+                <p>总市值：[[stockInfo.basic?.total_mv]]</p>
+                <p>市盈率(PE)：[[stockInfo.basic?.pe]]</p>
+                <p>市净率(PB)：[[stockInfo.basic?.pb]]</p>
+            </div>
+            <div class="info-box">
+                <h4>💸 资金流向</h4>
+                <p>北向资金：<span class="red">[[stockInfo.funds?.north_in]]亿</span></p>
+                <p>主力净流：<span class="green">[[stockInfo.funds?.main_in]]亿</span></p>
+                <p>融资余额：[[stockInfo.funds?.rzrq]]</p>
+            </div>
+            <el-button type="danger" size="large" @click="go('/api/decision/center/')">加入观察仓</el-button>
+        </div>
+    </div>
+</el-dialog>
 {% endblock %}
 
 {% block scripts %}
 <style>
-    .data-card { height: 120px; display: flex; flex-direction: column; justify-content: center; }
-    .card-title { font-size: 14px; color: #909399; margin-bottom: 5px; }
-    .card-num { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-    .card-desc { font-size: 12px; color: #C0C4CC; }
-    .signal-item { padding: 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: 0.2s; }
-    .signal-item:hover { background: #f9f9f9; }
+    .metric-card { height:120px; display:flex; flex-direction:column; justify-content:center }
+    .label { font-size:12px; color:#909399; margin-bottom:5px }
+    .value { font-size:20px; font-weight:bold; margin-bottom:5px }
+    .sub { font-size:12px; color:#C0C4CC }
+    .red{color:#F56C6C} .green{color:#67C23A}
+    .action:hover { border-color:#409EFF; cursor:pointer }
+    .signal-item { padding:12px; border-bottom:1px solid #eee; cursor:pointer; transition:0.2s } .signal-item:hover{background:#f5f7fa}
+    .s-head { display:flex; justify-content:space-between; font-weight:bold }
+    .info-box { background:#f9f9f9; padding:15px; border-radius:4px; border:1px solid #eee; }
+    .info-box h4 { margin:0 0 10px 0; color:#303133; }
+    .info-box p { margin:5px 0; font-size:13px; color:#606266; display:flex; justify-content:space-between; }
 </style>
 <script>
 function pageSetup() {
-    const market = ref({up_count:0, down_count:0, volume:'--', hot_sector:'--'});
+    const { ref, onMounted } = Vue;
+    const market = ref({});
+    const currentSnapshot = ref({});
+    const signals = ref([]);
+    const indexType = ref('000001.SH');
 
-    const init = async () => {
-        const res = await axios.get('/api/dashboard/data/');
+    const detailVisible = ref(false);
+    const currSignal = ref({});
+    const stockInfo = ref({});
+    let chart1=null, chart2=null;
+
+    const init = () => { loadData(); };
+
+    const loadData = async () => {
+        const res = await axios.get(`/api/dashboard/data/?type=${indexType.value}`);
         market.value = res.data.data.market;
-        renderChart(res.data.data.index_chart);
+        currentSnapshot.value = res.data.data.snapshot;
+        signals.value = res.data.data.signals;
+        renderMainChart(res.data.data.index_data);
     };
 
-    const renderChart = (data) => {
-        const chart = echarts.init(document.getElementById('index-chart'));
-        chart.setOption({
-            tooltip: {trigger:'axis'},
-            grid: {top:20, bottom:30, left:40, right:20},
-            xAxis: {data: data.map(i=>i.trade_date)},
-            yAxis: {scale:true},
-            series: [{type:'line', data: data.map(i=>i.close_price), smooth:true, areaStyle:{opacity:0.1}, itemStyle:{color:'#409EFF'}}]
+    // 主图：三窗联动 (K线 + MACD + KDJ)
+    const renderMainChart = (data) => {
+        if(chart1) chart1.dispose();
+        chart1 = echarts.init(document.getElementById('main-chart'));
+
+        // data: [date, open, close, low, high, vol, macd, dif, dea, k, d, j, rsi]
+        const dates = data.map(i=>i[0]);
+        const kdata = data.map(i=>[i[1],i[2],i[3],i[4]]); // OHLC
+        const macd = data.map(i=>i[6]);
+        const dif = data.map(i=>i[7]);
+        const dea = data.map(i=>i[8]);
+        const k = data.map(i=>i[9]);
+        const d = data.map(i=>i[10]);
+        const j = data.map(i=>i[11]);
+
+        chart1.setOption({
+            tooltip: { trigger:'axis', axisPointer:{type:'cross'} },
+            legend: { data:['K线','MA5','MACD','DIF','DEA','K','D','J'], top:0 },
+            grid: [
+                {left:'5%', right:'5%', height:'50%'}, // 主图
+                {left:'5%', right:'5%', top:'62%', height:'15%'}, // MACD
+                {left:'5%', right:'5%', top:'80%', height:'15%'}  // KDJ
+            ],
+            xAxis: [
+                { type:'category', data:dates, scale:true, boundaryGap:false, axisLine:{onZero:false}, splitLine:{show:false}, splitNumber:20, min:'dataMin', max:'dataMax' },
+                { type:'category', gridIndex:1, data:dates, show:false },
+                { type:'category', gridIndex:2, data:dates, show:false }
+            ],
+            yAxis: [
+                { scale:true, splitArea:{show:true} },
+                { gridIndex:1, splitNumber:3, axisLabel:{show:false} },
+                { gridIndex:2, splitNumber:3, axisLabel:{show:false} }
+            ],
+            dataZoom: [{type:'inside', xAxisIndex:[0,1,2], start:60, end:100}, {type:'slider', xAxisIndex:[0,1,2], bottom:0}],
+            series: [
+                {name:'K线', type:'candlestick', data:kdata, itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
+                {name:'MACD', type:'bar', xAxisIndex:1, yAxisIndex:1, data:macd, itemStyle:{color: (params)=>params.value>0?'#ef232a':'#14b143'}},
+                {name:'DIF', type:'line', xAxisIndex:1, yAxisIndex:1, data:dif, symbol:'none'},
+                {name:'DEA', type:'line', xAxisIndex:1, yAxisIndex:1, data:dea, symbol:'none'},
+                {name:'K', type:'line', xAxisIndex:2, yAxisIndex:2, data:k, symbol:'none', lineStyle:{width:1}},
+                {name:'D', type:'line', xAxisIndex:2, yAxisIndex:2, data:d, symbol:'none', lineStyle:{width:1}},
+                {name:'J', type:'line', xAxisIndex:2, yAxisIndex:2, data:j, symbol:'none', lineStyle:{width:1}}
+            ]
+        });
+    };
+
+    const showSignalDetail = (item) => {
+        currSignal.value = item;
+        detailVisible.value = true;
+    };
+
+    const renderDetailChart = async () => {
+        const res = await axios.get(`/api/stock/detail/?code=${currSignal.value.code}`);
+        const d = res.data.data;
+        stockInfo.value = { basic: d.basic, funds: d.funds };
+
+        if(chart2) chart2.dispose();
+        chart2 = echarts.init(document.getElementById('detail-kline'));
+
+        chart2.setOption({
+            tooltip: { trigger:'axis', axisPointer:{type:'cross'} },
+            legend: { data:['K线','MA5','MA20'] },
+            grid: { left:'5%', right:'5%', bottom:'15%' },
+            xAxis: { data: d.dates },
+            yAxis: { scale:true },
+            dataZoom: [{type:'inside'}, {type:'slider', bottom:0}],
+            series: [
+                {name:'K线', type:'candlestick', data:d.values, itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
+                {name:'MA5', type:'line', data:d.indicators.MA5, smooth:true, lineStyle:{opacity:0.5}},
+                {name:'MA20', type:'line', data:d.indicators.MA20, smooth:true, lineStyle:{opacity:0.5}}
+            ]
         });
     };
 
     onMounted(init);
-    return { market };
+    return { market, currentSnapshot, signals, indexType, loadData, detailVisible, currSignal, showSignalDetail, renderDetailChart, stockInfo };
 }
 </script>
 {% endblock %}

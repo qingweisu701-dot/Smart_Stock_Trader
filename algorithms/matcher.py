@@ -4,10 +4,9 @@ from fastdtw import fastdtw
 from data_engine.models import StockDaily, StockBasic
 
 # ==========================================
-# 1. 完整形态库 (修复了字段缺失)
+# 1. 24种专业形态库
 # ==========================================
 PRESET_PATTERNS = {
-    # --- 📈 看涨形态 ---
     'hammer_low': {'type': 'KLINE', 'signal': 'BUY', 'desc': '低位倒锤线',
                    'data': [{'open': 20, 'close': 25, 'low': 20, 'high': 60}]},
     'morning_star': {'type': 'KLINE', 'signal': 'BUY', 'desc': '启明之星',
@@ -21,8 +20,6 @@ PRESET_PATTERNS = {
     'five_waves': {'type': 'DRAW', 'signal': 'BUY', 'desc': '五浪上涨', 'data': [0, 60, 30, 80, 50, 100]},
     'w_bottom': {'type': 'DRAW', 'signal': 'BUY', 'desc': 'W底', 'data': [100, 0, 50, 0, 100]},
     'v_reversal': {'type': 'DRAW', 'signal': 'BUY', 'desc': 'V型反转', 'data': [100, 0, 100]},
-
-    # --- 📉 看跌形态 ---
     'dark_cloud': {'type': 'KLINE', 'signal': 'SELL', 'desc': '乌云盖顶',
                    'data': [{'open': 20, 'close': 80, 'low': 15, 'high': 85},
                             {'open': 90, 'close': 50, 'low': 45, 'high': 95}]},
@@ -35,9 +32,9 @@ PRESET_PATTERNS = {
 }
 
 
-# ... (normalize_series, calculate_indicators, analyze_kline_signals 保持不变) ...
-# 请直接复制上一次的 analyze_kline_signals，为了节省篇幅略过
-
+# ==========================================
+# 2. 基础函数 (含全套指标计算)
+# ==========================================
 def normalize_series(series):
     series = np.array(series)
     if np.std(series) == 0: return series
@@ -45,14 +42,41 @@ def normalize_series(series):
 
 
 def calculate_indicators(df):
-    if 'close' not in df.columns: return df
+    """
+    计算全套技术指标，并处理空值
+    """
+    # 确保必需列存在
+    for col in ['close', 'open', 'high', 'low']:
+        if col not in df.columns: return df
+
+    # 1. 均线
     df['MA5'] = df['close'].rolling(5).mean()
     df['MA10'] = df['close'].rolling(10).mean()
     df['MA20'] = df['close'].rolling(20).mean()
+
+    # 2. MACD
     exp12 = df['close'].ewm(span=12, adjust=False).mean()
     exp26 = df['close'].ewm(span=26, adjust=False).mean()
     df['DIF'] = exp12 - exp26
     df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
+    df['MACD'] = (df['DIF'] - df['DEA']) * 2
+
+    # 3. RSI
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    # 4. KDJ (防止 high/low 不存在的情况)
+    low_list = df['low'].rolling(9, min_periods=9).min()
+    high_list = df['high'].rolling(9, min_periods=9).max()
+    rsv = (df['close'] - low_list) / (high_list - low_list) * 100
+    df['K'] = rsv.ewm(com=2, adjust=False).mean()
+    df['D'] = df['K'].ewm(com=2, adjust=False).mean()
+    df['J'] = 3 * df['K'] - 2 * df['D']
+
+    # 5. 填充所有 NaN 为 0，防止前端报错
     return df.fillna(0)
 
 
@@ -62,26 +86,40 @@ def analyze_kline_signals(df):
     for i in range(2, len(df)):
         curr = df.iloc[i]
         prev = df.iloc[i - 1]
-        if prev['MA5'] < prev['MA10'] and curr['MA5'] > curr['MA10']: signals.append(
-            {'idx': i, 'type': 'BUY', 'msg': 'MA金叉'})
-        if prev['close'] > prev['open'] and curr['close'] < curr['open'] and curr['open'] > prev['close'] and curr[
-            'close'] < (prev['open'] + prev['close']) / 2:
-            signals.append({'idx': i, 'type': 'SELL', 'msg': '乌云盖顶'})
+
+        # 信号判定逻辑
+        if prev['MA5'] < prev['MA10'] and curr['MA5'] > curr['MA10']:
+            signals.append({'idx': i, 'type': 'BUY', 'msg': 'MA金叉'})
+        if prev['DIF'] < prev['DEA'] and curr['DIF'] > curr['DEA']:
+            signals.append({'idx': i, 'type': 'BUY', 'msg': 'MACD金叉'})
+        if prev['K'] < prev['D'] and curr['K'] > curr['D'] and curr['K'] < 30:
+            signals.append({'idx': i, 'type': 'BUY', 'msg': 'KDJ金叉'})
+
+        # 乌云盖顶
+        if prev['close'] > prev['open'] and curr['close'] < curr['open']:
+            if curr['open'] > prev['close'] and curr['close'] < (prev['open'] + prev['close']) / 2:
+                signals.append({'idx': i, 'type': 'SELL', 'msg': '乌云盖顶'})
+
     return signals
 
 
+# ==========================================
+# 3. 核心扫描 (保留)
+# ==========================================
 def run_analysis_core(target_pattern_data=None, filters=None):
-    # 核心扫描逻辑 (保持不变，确保有 OHLC 筛选)
     target_series = []
     has_pattern = False
+
     if target_pattern_data:
         if isinstance(target_pattern_data[0], (int, float)):
-            target_series = target_pattern_data;
+            target_series = target_pattern_data
             has_pattern = True
         elif isinstance(target_pattern_data[0], dict):
-            target_series = [x['close'] for x in target_pattern_data];
+            target_series = [x['close'] for x in target_pattern_data]
             has_pattern = True
-    if has_pattern: norm_target = normalize_series(target_series)
+
+    if has_pattern:
+        norm_target = normalize_series(target_series)
 
     all_stocks = StockBasic.objects.all()
     results = []
@@ -89,11 +127,10 @@ def run_analysis_core(target_pattern_data=None, filters=None):
     min_score = float(filters.get('minScore', 60))
     target_cap = filters.get('marketCap', '')
 
-    # 价格筛选
     try:
-        min_c = float(filters.get('minClose') or 0); max_c = float(filters.get('maxClose') or 99999)
+        f_min_open = float(filters.get('minOpen') or 0); f_max_open = float(filters.get('maxOpen') or 99999)
     except:
-        min_c = 0; max_c = 99999
+        f_min_open = 0; f_max_open = 99999
 
     for stock in all_stocks:
         m_cap = stock.market_cap or 0
@@ -103,27 +140,28 @@ def run_analysis_core(target_pattern_data=None, filters=None):
         qs = StockDaily.objects.filter(ts_code=stock.ts_code).order_by('-trade_date')[:60]
         data = list(qs.values('trade_date', 'open_price', 'close_price', 'high_price', 'low_price'))
         if len(data) < 20: continue
+
         df = pd.DataFrame(data[::-1])
         df.rename(columns={'open_price': 'open', 'close_price': 'close', 'high_price': 'high', 'low_price': 'low'},
                   inplace=True)
+        curr = df.iloc[-1]
 
-        if not (min_c <= df.iloc[-1]['close'] <= max_c): continue
+        if not (f_min_open <= curr['open'] <= f_max_open): continue
 
         dtw_score = 0
-        match_data = []
         if has_pattern:
-            if len(df) >= len(target_series):
-                seg = df['close'].iloc[-len(target_series):].values
+            window = len(target_series)
+            if len(df) >= window:
+                seg = df['close'].iloc[-window:].values
                 dist, _ = fastdtw(norm_target, normalize_series(seg), dist=lambda x, y: abs(x - y))
                 dtw_score = max(0, 100 - dist * 2)
-                match_data = seg.tolist()
 
         final = dtw_score if has_pattern else 60
         if final < min_score: continue
 
         results.append({
-            'code': stock.ts_code, 'name': stock.name, 'price': df.iloc[-1]['close'],
-            'score': round(final, 1), 'confidence': 85, 'match_data': match_data, 'match_type': 'BUY'
+            'code': stock.ts_code, 'name': stock.name, 'price': round(curr['close'], 2),
+            'score': round(final, 1), 'confidence': 85, 'match_data': [], 'match_type': 'BUY'
         })
 
     results.sort(key=lambda x: x['score'], reverse=True)
