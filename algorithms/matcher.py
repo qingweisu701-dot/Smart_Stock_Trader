@@ -3,9 +3,7 @@ import pandas as pd
 from fastdtw import fastdtw
 from data_engine.models import StockDaily, StockBasic
 
-# ==========================================
-# 1. 完整形态库 (保持不变，确保数据完整)
-# ==========================================
+# 1. 形态库 (保持不变，数据完整)
 PRESET_PATTERNS = {
     'hammer_low': {'type': 'KLINE', 'signal': 'BUY', 'desc': '低位倒锤线',
                    'data': [{'open': 20, 'close': 25, 'low': 20, 'high': 60}]},
@@ -32,7 +30,6 @@ PRESET_PATTERNS = {
 }
 
 
-# ... (normalize_series, calculate_indicators, analyze_kline_signals 保持不变) ...
 def normalize_series(series):
     series = np.array(series)
     if np.std(series) == 0: return series
@@ -40,27 +37,48 @@ def normalize_series(series):
 
 
 def calculate_indicators(df):
-    if 'close' not in df.columns: return df
+    """
+    🔥 核心修复：强制保证所有指标列存在，防止 KeyError
+    """
+    # 必需列检查
+    for col in ['close', 'open', 'high', 'low']:
+        if col not in df.columns: return df
+
+    # 初始化目标列，防止因数据行数不足导致列缺失
+    target_cols = ['MA5', 'MA10', 'MA20', 'K', 'D', 'J', 'RSI', 'MACD', 'DIF', 'DEA']
+    for col in target_cols:
+        if col not in df.columns: df[col] = 0.0
+
+    # 至少需要一定数据量才能计算
+    if len(df) < 2: return df
+
+    # MA
     df['MA5'] = df['close'].rolling(5).mean()
     df['MA10'] = df['close'].rolling(10).mean()
     df['MA20'] = df['close'].rolling(20).mean()
+
+    # MACD
     exp12 = df['close'].ewm(span=12, adjust=False).mean()
     exp26 = df['close'].ewm(span=26, adjust=False).mean()
     df['DIF'] = exp12 - exp26
     df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
-    # 增加 KDJ, RSI 计算
+    df['MACD'] = (df['DIF'] - df['DEA']) * 2
+
+    # RSI
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
+    # KDJ
     low_list = df['low'].rolling(9, min_periods=9).min()
     high_list = df['high'].rolling(9, min_periods=9).max()
     rsv = (df['close'] - low_list) / (high_list - low_list) * 100
     df['K'] = rsv.ewm(com=2, adjust=False).mean()
     df['D'] = df['K'].ewm(com=2, adjust=False).mean()
     df['J'] = 3 * df['K'] - 2 * df['D']
+
     return df.fillna(0)
 
 
@@ -76,13 +94,14 @@ def analyze_kline_signals(df):
             {'idx': i, 'type': 'BUY', 'msg': 'MACD金叉'})
         if curr['K'] > curr['D'] and prev['K'] < prev['D'] and curr['K'] < 30: signals.append(
             {'idx': i, 'type': 'BUY', 'msg': 'KDJ金叉'})
+        if prev['close'] > prev['open'] and curr['close'] < curr['open']:
+            if curr['open'] > prev['close'] and curr['close'] < (prev['open'] + prev['close']) / 2: signals.append(
+                {'idx': i, 'type': 'SELL', 'msg': '乌云盖顶'})
     return signals
 
 
-# ==========================================
-# 3. 核心扫描 (启用阈值筛选)
-# ==========================================
 def run_analysis_core(target_pattern_data=None, filters=None):
+    # 保持原有的 DTW 匹配逻辑
     target_series = []
     has_pattern = False
 
@@ -97,57 +116,48 @@ def run_analysis_core(target_pattern_data=None, filters=None):
 
     all_stocks = StockBasic.objects.all()
     results = []
-
     filters = filters or {}
-    # 🔥 关键修复：接收并转换阈值参数，默认 60 分
+
     try:
         min_score = float(filters.get('minScore', 60))
     except:
         min_score = 60
 
-    target_cap = filters.get('marketCap', '')
-
     try:
-        min_c = float(filters.get('minClose') or 0); max_c = float(filters.get('maxClose') or 99999)
+        f_min_open = float(filters.get('minOpen') or 0); f_max_open = float(filters.get('maxOpen') or 99999)
     except:
-        min_c = 0; max_c = 99999
+        f_min_open = 0; f_max_open = 99999
 
     for stock in all_stocks:
         m_cap = stock.market_cap or 0
-        if target_cap == 'SMALL' and m_cap >= 50: continue
-        if target_cap == 'LARGE' and m_cap <= 200: continue
+        if filters.get('marketCap') == 'SMALL' and m_cap >= 50: continue
+        if filters.get('marketCap') == 'LARGE' and m_cap < 50: continue
 
         qs = StockDaily.objects.filter(ts_code=stock.ts_code).order_by('-trade_date')[:60]
         data = list(qs.values('trade_date', 'open_price', 'close_price', 'high_price', 'low_price'))
         if len(data) < 20: continue
+
         df = pd.DataFrame(data[::-1])
         df.rename(columns={'open_price': 'open', 'close_price': 'close', 'high_price': 'high', 'low_price': 'low'},
                   inplace=True)
+        curr = df.iloc[-1]
 
-        if not (min_c <= df.iloc[-1]['close'] <= max_c): continue
+        if not (f_min_open <= curr['open'] <= f_max_open): continue
 
-        # DTW 匹配
         dtw_score = 0
-        match_data = []
         if has_pattern:
-            if len(df) >= len(target_series):
-                seg = df['close'].iloc[-len(target_series):].values
+            window = len(target_series)
+            if len(df) >= window:
+                seg = df['close'].iloc[-window:].values
                 dist, _ = fastdtw(norm_target, normalize_series(seg), dist=lambda x, y: abs(x - y))
-                # 将距离转换为 0-100 的相似度分数
                 dtw_score = max(0, 100 - dist * 2)
-                match_data = seg.tolist()
 
-        final_score = dtw_score if has_pattern else 60
-
-        # 🔥 关键修复：真正使用阈值进行过滤
-        if final_score < min_score: continue
+        final = dtw_score if has_pattern else 60
+        if final < min_score: continue
 
         results.append({
-            'code': stock.ts_code, 'name': stock.name, 'price': df.iloc[-1]['close'],
-            'score': round(final_score, 1),
-            'confidence': round(min(99, 50 + (final_score - 60) * 0.8), 1),
-            'match_data': match_data,
-            'match_type': 'BUY'
+            'code': stock.ts_code, 'name': stock.name, 'price': round(curr['close'], 2),
+            'score': round(final, 1), 'confidence': 85, 'match_data': [], 'match_type': 'BUY'
         })
 
     results.sort(key=lambda x: x['score'], reverse=True)

@@ -12,12 +12,11 @@
     <script src="{% static 'js/axios.min.js' %}"></script>
     <style>
         body { margin: 0; background: #f5f7fa; font-family: 'PingFang SC', sans-serif; }
-        .el-aside { background: #001529; color: white; height: 100vh; transition: width 0.3s; }
-        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; cursor: pointer; border-bottom: 1px solid #000; }
+        .el-aside { background: #001529; color: white; height: 100vh; }
+        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; cursor: pointer; }
         .header { background: #fff; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
         .el-menu { border-right: none; }
         [v-cloak] { display: none; }
-        .el-breadcrumb { font-size: 14px; line-height: 60px; }
     </style>
 </head>
 <body>
@@ -25,48 +24,30 @@
         <el-container>
             <el-aside width="220px">
                 <div class="logo" @click="go('/api/dashboard/')">📈 Smart Trader</div>
-
-                <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF"
-                         :default-active="activeMenu" :default-openeds="['1', '2', '3']">
-
-                    <el-menu-item index="0" @click="go('/api/dashboard/')">
-                        <el-icon><Odometer /></el-icon><span>驾驶舱 (Dashboard)</span>
-                    </el-menu-item>
-
+                <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF" :default-active="activeMenu" :default-openeds="['1', '2', '3']">
+                    <el-menu-item index="0" @click="go('/api/dashboard/')"><el-icon><Odometer /></el-icon><span>驾驶舱</span></el-menu-item>
                     <el-sub-menu index="1">
-                        <template #title><el-icon><Edit /></el-icon><span>图形管理实验室</span></template>
-                        <el-menu-item index="1-1" @click="go('/api/pattern/lab/')">📐 绘制与形态库</el-menu-item>
+                        <template #title><el-icon><Edit /></el-icon><span>图形管理</span></template>
+                        <el-menu-item index="1-1" @click="go('/api/pattern/lab/')">绘制与形态库</el-menu-item>
                     </el-sub-menu>
-
                     <el-sub-menu index="2">
-                        <template #title><el-icon><Search /></el-icon><span>市场分析与扫描</span></template>
-                        <el-menu-item index="2-1" @click="go('/api/analysis/scan/')">🔍 智能筛选器</el-menu-item>
-                        <el-menu-item index="2-2" @click="go('/api/analysis/fav/')">⭐ 我的观察仓</el-menu-item>
+                        <template #title><el-icon><Search /></el-icon><span>市场分析</span></template>
+                        <el-menu-item index="2-1" @click="go('/api/analysis/scan/')">智能筛选器</el-menu-item>
+                        <el-menu-item index="2-2" @click="go('/api/analysis/fav/')">我的观察仓</el-menu-item>
                     </el-sub-menu>
-
                     <el-sub-menu index="3">
-                        <template #title><el-icon><Cpu /></el-icon><span>量化决策中心</span></template>
-                        <el-menu-item index="3-1" @click="go('/api/decision/center/')">📊 深度分析与回测</el-menu-item>
+                        <template #title><el-icon><Cpu /></el-icon><span>决策中心</span></template>
+                        <el-menu-item index="3-1" @click="go('/api/decision/center/')">深度分析</el-menu-item>
                     </el-sub-menu>
-
-                    <el-menu-item index="4" @click="go('/api/trade/history/')">
-                        <el-icon><List /></el-icon><span>交易流水</span>
-                    </el-menu-item>
+                    <el-menu-item index="4" @click="go('/api/trade/history/')"><el-icon><List /></el-icon><span>交易流水</span></el-menu-item>
                 </el-menu>
             </el-aside>
             <el-container>
                 <el-header class="header">
-                    <el-breadcrumb separator="/">
-                        <el-breadcrumb-item :to="{ path: '/api/dashboard/' }">首页</el-breadcrumb-item>
-                        <el-breadcrumb-item>[[ pageTitle ]]</el-breadcrumb-item>
-                    </el-breadcrumb>
-                    <div @click="showMsg" style="cursor: pointer;">
-                        <el-icon size="20"><Bell /></el-icon>
-                    </div>
+                    <el-breadcrumb separator="/"><el-breadcrumb-item :to="{path:'/api/dashboard/'}">首页</el-breadcrumb-item><el-breadcrumb-item>[[pageTitle]]</el-breadcrumb-item></el-breadcrumb>
+                    <div style="cursor: pointer;"><el-icon size="20"><Bell /></el-icon></div>
                 </el-header>
-                <el-main>
-                    {% block content %}{% endblock %}
-                </el-main>
+                <el-main>{% block content %}{% endblock %}</el-main>
             </el-container>
         </el-container>
     </div>
@@ -74,30 +55,44 @@
     {% block scripts %}{% endblock %}
 
     <script>
-        const { createApp, ref, onMounted, computed, watch } = Vue;
+        const { createApp, ref, onMounted } = Vue;
         if (typeof pageSetup === 'undefined') { window.pageSetup = () => ({}); }
 
         const app = createApp({
             delimiters: ['[[', ']]'],
             setup() {
                 const path = window.location.pathname;
-                let m = '0';
-                let title = '驾驶舱';
-
-                // 自动更新面包屑标题
-                if(path.includes('pattern')) { m='1-1'; title='图形管理实验室'; }
-                else if(path.includes('analysis/scan')) { m='2-1'; title='智能筛选器'; }
-                else if(path.includes('analysis/fav')) { m='2-2'; title='我的观察仓'; }
-                else if(path.includes('decision')) { m='3-1'; title='决策中心'; }
-                else if(path.includes('trade')) { m='4'; title='交易流水'; }
+                let m='0', t='首页';
+                if(path.includes('pattern')) {m='1-1';t='图形管理';}
+                else if(path.includes('analysis/scan')) {m='2-1';t='智能筛选';}
+                else if(path.includes('decision')) {m='3-1';t='决策中心';}
 
                 const activeMenu = ref(m);
-                const pageTitle = ref(title);
+                const pageTitle = ref(t);
                 const go = (url) => window.location.href = url;
-                const showMsg = () => ElementPlus.ElMessage.info('暂无新消息');
 
-                const pageLogic = window.pageSetup();
-                return { activeMenu, pageTitle, go, showMsg, ...pageLogic };
+                // 🔥 核心：全局消息轮询 (每10秒检查一次策略命中)
+                const startPolling = () => {
+                    setInterval(async () => {
+                        try {
+                            const res = await axios.get('/api/message/check/');
+                            if (res.data.data && res.data.data.length > 0) {
+                                res.data.data.forEach(msg => {
+                                    ElementPlus.ElNotification({
+                                        title: msg.title,
+                                        message: msg.content,
+                                        type: 'success',
+                                        duration: 0 // 不自动关闭，直到用户点击
+                                    });
+                                });
+                            }
+                        } catch(e) { console.log('Polling error', e); }
+                    }, 10000);
+                };
+
+                onMounted(startPolling);
+
+                return { activeMenu, pageTitle, go, ...window.pageSetup() };
             }
         });
         app.use(ElementPlus);
