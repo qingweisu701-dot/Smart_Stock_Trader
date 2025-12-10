@@ -25,7 +25,7 @@
             <el-aside width="220px">
                 <div class="logo" @click="go('/api/dashboard/')">📈 Smart Trader</div>
                 <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF" :default-active="activeMenu" :default-openeds="['1', '2', '3']">
-                    <el-menu-item index="0" @click="go('/api/dashboard/')"><el-icon><Odometer /></el-icon><span>驾驶舱</span></el-menu-item>
+                    <el-menu-item index="0" @click="go('/api/dashboard/')"><el-icon><Odometer /></el-icon><span>首页</span></el-menu-item>
                     <el-sub-menu index="1">
                         <template #title><el-icon><Edit /></el-icon><span>图形管理</span></template>
                         <el-menu-item index="1-1" @click="go('/api/pattern/lab/')">绘制与形态库</el-menu-item>

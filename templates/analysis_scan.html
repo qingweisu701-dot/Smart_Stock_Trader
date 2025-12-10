@@ -22,8 +22,8 @@
             </el-card>
             <el-card shadow="never" class="filter-card">
                 <div slot="header" class="card-header">⚡ 监控条件</div>
-                <el-form-item label="触发"><el-checkbox-group v-model="filters.gridConditions"><el-checkbox label="grid_buy">网格买入</el-checkbox></el-checkbox-group></el-form-item>
-                <el-form-item label="价格"><el-row :gutter="5"><el-col :span="12"><el-input v-model="filters.priceBreak" placeholder="突破"/></el-col><el-col :span="12"><el-input v-model="filters.priceFall" placeholder="回落"/></el-col></el-row></el-form-item>
+                <el-form-item label="网格触发"><el-checkbox-group v-model="filters.gridConditions"><el-checkbox label="grid_buy">网格买入</el-checkbox></el-checkbox-group></el-form-item>
+                <el-form-item label="价格监控"><el-row :gutter="5"><el-col :span="12"><el-input v-model="filters.priceBreak" placeholder="突破价"/></el-col><el-col :span="12"><el-input v-model="filters.priceFall" placeholder="回落价"/></el-col></el-row></el-form-item>
             </el-card>
             <div style="margin-top:20px"><el-button type="primary" size="large" style="width:100%" @click="runScan" :loading="loading">开始扫描</el-button><el-button type="warning" plain style="width:100%;margin-top:10px" @click="saveStrategyDialog=true">保存策略</el-button></div>
         </el-form>
@@ -122,60 +122,54 @@ function pageSetup() {
 
     const showDetail = (row) => { currCode.value = row.code; detailVisible.value = true; };
 
-    // 🔥 修复：同步使用新的图表渲染逻辑
+    // 🔥 修复：同步使用新的图表渲染逻辑 (带中文 Tooltip)
     const renderDetailChart = async () => {
         const res = await axios.get(`/api/stock/detail/?code=${currCode.value}`);
+        if(res.data.code !== 200) return;
         const d = res.data.data;
         if(chart) chart.dispose();
         chart = echarts.init(document.getElementById('detail-chart'));
 
+        const ind = d.indicators;
         let indSeries = [];
         if(currIndicator.value === 'MACD') {
-            indSeries = [
-                {name:'MACD', type:'bar', xAxisIndex:2, yAxisIndex:2, data:d.indicators.MACD, itemStyle:{color:p=>p.value>0?'#ef232a':'#14b143'}},
-                {name:'DIF', type:'line', xAxisIndex:2, yAxisIndex:2, data:d.indicators.DIF, symbol:'none'},
-                {name:'DEA', type:'line', xAxisIndex:2, yAxisIndex:2, data:d.indicators.DEA, symbol:'none'}
-            ];
+            indSeries = [{name:'MACD', type:'bar', xAxisIndex:2, yAxisIndex:2, data:ind.MACD, itemStyle:{color:p=>p.value>0?'#ef232a':'#14b143'}},{name:'DIF', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DIF, symbol:'none'},{name:'DEA', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DEA, symbol:'none'}];
         } else if(currIndicator.value === 'KDJ') {
-            indSeries = [
-                {name:'K', type:'line', xAxisIndex:2, yAxisIndex:2, data:d.indicators.K, symbol:'none'},
-                {name:'D', type:'line', xAxisIndex:2, yAxisIndex:2, data:d.indicators.D, symbol:'none'},
-                {name:'J', type:'line', xAxisIndex:2, yAxisIndex:2, data:d.indicators.J, symbol:'none'}
-            ];
+            indSeries = [{name:'K', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.K, symbol:'none'},{name:'D', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.D, symbol:'none'},{name:'J', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.J, symbol:'none'}];
         } else {
-            indSeries = [{name:'RSI', type:'line', xAxisIndex:2, yAxisIndex:2, data:d.indicators.RSI, symbol:'none'}];
+            indSeries = [{name:'RSI', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.RSI, symbol:'none'}];
         }
 
         chart.setOption({
             tooltip: {
                 trigger:'axis', axisPointer:{type:'cross'},
+                // 🔥 修复：中文 Tooltip
                 formatter: function (params) {
-                    let res = params[0].name + '<br/>';
-                    for (let p of params) {
-                        if (p.seriesName === 'K线') {
-                            res += `K线: 开${p.data[1]} 收${p.data[2]}<br/>`;
-                        } else if (p.seriesName === '成交量') {
-                            res += `量: ${p.data}<br/>`;
+                    let res = `<div style="margin-bottom:5px;font-weight:bold">${params[0].name}</div>`;
+                    params.forEach(p => {
+                        if(p.seriesName === 'K线') {
+                            const open = p.data[1], close = p.data[2];
+                            const chg = ((close - open) / open * 100).toFixed(2);
+                            const color = chg >= 0 ? '#ef232a' : '#14b143';
+                            res += `K线：<span style="color:${color}">收${close} (幅${chg}%)</span><br/>`;
+                        } else if(p.seriesName === '成交量') {
+                            res += `成交量：${(p.data).toLocaleString()}<br/>`;
                         } else {
-                            res += `${p.seriesName}: ${p.value ? p.value.toFixed(2) : '--'}<br/>`;
+                            res += `${p.seriesName}：${p.value ? p.value.toFixed(2) : '--'}<br/>`;
                         }
-                    }
+                    });
                     return res;
                 }
             },
+            legend: { top:0, data:['K线','MA5','MA20','成交量',currIndicator.value] },
             grid: [{left:'8%',right:'5%',height:'45%'}, {left:'8%',right:'5%',top:'58%',height:'15%'}, {left:'8%',right:'5%',top:'78%',height:'15%'}],
-            xAxis: [
-                {type:'category', data:d.dates, boundaryGap:false, axisLine:{onZero:false}},
-                {type:'category', gridIndex:1, data:d.dates, show:false},
-                {type:'category', gridIndex:2, data:d.dates, show:false}
-            ],
-            yAxis: [
-                {scale:true, splitArea:{show:true}}, {gridIndex:1, splitNumber:2, axisLabel:{show:false}}, {gridIndex:2, splitNumber:2, axisLabel:{show:false}}
-            ],
+            xAxis: [{type:'category', data:d.dates, boundaryGap:false, axisLine:{onZero:false}}, {type:'category', gridIndex:1, data:d.dates, show:false}, {type:'category', gridIndex:2, data:d.dates, show:false}],
+            yAxis: [{scale:true, splitArea:{show:true}}, {gridIndex:1, splitNumber:2, axisLabel:{show:false}}, {gridIndex:2, splitNumber:2, axisLabel:{show:false}}],
             dataZoom: [{type:'inside', xAxisIndex:[0,1,2], start:50, end:100}, {type:'slider', xAxisIndex:[0,1,2], bottom:0}],
             series: [
                 {name:'K线', type:'candlestick', data:d.values.map(v=>[v[0],v[1],v[2],v[3]]), itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
-                {name:'MA5', type:'line', data:d.indicators.MA5, smooth:true, lineStyle:{opacity:0.5}},
+                {name:'MA5', type:'line', data:ind.MA5, smooth:true, lineStyle:{opacity:0.5}},
+                {name:'MA20', type:'line', data:ind.MA20, smooth:true, lineStyle:{opacity:0.5}},
                 {name:'成交量', type:'bar', xAxisIndex:1, yAxisIndex:1, data:d.values.map(v=>v[4]), itemStyle:{color:p=>d.values[p.dataIndex][1]>d.values[p.dataIndex][0]?'#ef232a':'#14b143'}},
                 ...indSeries
             ]
