@@ -1,6 +1,7 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="zh">
+
 <head>
     <meta charset="UTF-8">
     <title>智能量化投研平台</title>
@@ -11,41 +12,153 @@
     <script src="{% static 'js/echarts.min.js' %}"></script>
     <script src="{% static 'js/axios.min.js' %}"></script>
     <style>
-        body { margin: 0; background: #f5f7fa; font-family: 'PingFang SC', sans-serif; }
-        .el-aside { background: #001529; color: white; height: 100vh; }
-        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; background: #002140; color: #409EFF; cursor: pointer; }
-        .header { background: #fff; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
-        .el-menu { border-right: none; }
-        [v-cloak] { display: none; }
+        body {
+            margin: 0;
+            background: #f0f2f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+        }
+
+        .el-aside {
+            background: #001529;
+            color: rgba(255, 255, 255, 0.65);
+            height: 100vh;
+            box-shadow: 2px 0 6px rgba(0, 21, 41, 0.35);
+            z-index: 10;
+        }
+
+        .logo {
+            height: 64px;
+            line-height: 64px;
+            padding-left: 24px;
+            font-size: 20px;
+            font-weight: 600;
+            background: #002140;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .logo span {
+            margin-left: 10px;
+            font-family: 'PingFang SC', sans-serif;
+        }
+
+        .header {
+            background: #fff;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+            z-index: 9;
+        }
+
+        .el-menu {
+            border-right: none;
+            background: transparent;
+        }
+
+        .el-menu-item {
+            height: 50px;
+            line-height: 50px;
+            margin: 4px 0;
+        }
+
+        .el-menu-item.is-active {
+            background-color: #1890ff !important;
+            color: #fff;
+        }
+
+        .el-main {
+            padding: 24px;
+            min-height: calc(100vh - 64px);
+        }
+
+        [v-cloak] {
+            display: none;
+        }
+
+        /* Global Card Override */
+        .el-card {
+            border-radius: 4px;
+            border: 1px solid #f0f0f0;
+        }
+
+        .el-card__header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #f0f0f0;
+            font-weight: 500;
+        }
+
+        .el-card__body {
+            padding: 24px;
+        }
     </style>
 </head>
+
 <body>
     <div id="app" v-cloak>
         <el-container>
             <el-aside width="220px">
-                <div class="logo" @click="go('/api/dashboard/')">📈 Smart Trader</div>
-                <el-menu background-color="#001529" text-color="#fff" active-text-color="#409EFF" :default-active="activeMenu" :default-openeds="['1', '2', '3']">
-                    <el-menu-item index="0" @click="go('/api/dashboard/')"><el-icon><Odometer /></el-icon><span>首页</span></el-menu-item>
+                <div class="logo" @click="go('/api/dashboard/')">
+                    <el-icon :size="24" color="#1890ff"><Trend-Charts /></el-icon>
+                    <span>Smart Trader</span>
+                </div>
+                <el-menu background-color="#001529" text-color="rgba(255,255,255,0.65)" active-text-color="#fff"
+                    :default-active="activeMenu" :default-openeds="['1', '2', '3']">
+                    <el-menu-item index="0" @click="go('/api/dashboard/')"><el-icon>
+                            <Odometer />
+                        </el-icon><span>首页 (Dashboard)</span></el-menu-item>
                     <el-sub-menu index="1">
-                        <template #title><el-icon><Edit /></el-icon><span>图形管理</span></template>
-                        <el-menu-item index="1-1" @click="go('/api/pattern/lab/')">绘制与形态库</el-menu-item>
+                        <template #title><el-icon>
+                                <Edit />
+                            </el-icon><span>图形管理</span></template>
+                        <el-menu-item index="1-1" @click="go('/api/pattern/lab/')">形态实验室</el-menu-item>
                     </el-sub-menu>
                     <el-sub-menu index="2">
-                        <template #title><el-icon><Search /></el-icon><span>市场分析</span></template>
+                        <template #title><el-icon>
+                                <Search />
+                            </el-icon><span>市场分析</span></template>
                         <el-menu-item index="2-1" @click="go('/api/analysis/scan/')">智能筛选器</el-menu-item>
                         <el-menu-item index="2-2" @click="go('/api/analysis/fav/')">我的观察仓</el-menu-item>
                     </el-sub-menu>
                     <el-sub-menu index="3">
-                        <template #title><el-icon><Cpu /></el-icon><span>决策中心</span></template>
+                        <template #title><el-icon>
+                                <Cpu />
+                            </el-icon><span>决策中心</span></template>
                         <el-menu-item index="3-1" @click="go('/api/decision/center/')">深度分析</el-menu-item>
                     </el-sub-menu>
-                    <el-menu-item index="4" @click="go('/api/trade/history/')"><el-icon><List /></el-icon><span>交易流水</span></el-menu-item>
+                    <el-menu-item index="4" @click="go('/api/trade/history/')"><el-icon>
+                            <List />
+                        </el-icon><span>交易流水</span></el-menu-item>
                 </el-menu>
             </el-aside>
             <el-container>
                 <el-header class="header">
-                    <el-breadcrumb separator="/"><el-breadcrumb-item :to="{path:'/api/dashboard/'}">首页</el-breadcrumb-item><el-breadcrumb-item>[[pageTitle]]</el-breadcrumb-item></el-breadcrumb>
-                    <div style="cursor: pointer;"><el-icon size="20"><Bell /></el-icon></div>
+                    <div style="display:flex; align-items:center">
+                        <el-icon style="margin-right:10px; cursor:pointer" @click="toggleCollapse">
+                            <Fold />
+                        </el-icon>
+                        <el-breadcrumb separator="/">
+                            <el-breadcrumb-item :to="{path:'/api/dashboard/'}">首页</el-breadcrumb-item>
+                            <el-breadcrumb-item>[[pageTitle]]</el-breadcrumb-item>
+                        </el-breadcrumb>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:20px">
+                        <el-badge :value="0" class="item" style="cursor: pointer; display:flex; align-items:center">
+                            <el-icon size="20">
+                                <Bell />
+                            </el-icon>
+                        </el-badge>
+                        <div style="display:flex; align-items:center; cursor:pointer">
+                            <el-avatar size="small" style="background:#1890ff">A</el-avatar>
+                            <span style="margin-left:8px; font-size:14px; color:#606266">Admin User</span>
+                        </div>
+                    </div>
                 </el-header>
                 <el-main>{% block content %}{% endblock %}</el-main>
             </el-container>
@@ -62,14 +175,17 @@
             delimiters: ['[[', ']]'],
             setup() {
                 const path = window.location.pathname;
-                let m='0', t='首页';
-                if(path.includes('pattern')) {m='1-1';t='图形管理';}
-                else if(path.includes('analysis/scan')) {m='2-1';t='智能筛选';}
-                else if(path.includes('decision')) {m='3-1';t='决策中心';}
+                let m = '0', t = '首页';
+                if (path.includes('pattern')) { m = '1-1'; t = '图形管理'; }
+                else if (path.includes('analysis/scan')) { m = '2-1'; t = '智能筛选'; }
+                else if (path.includes('analysis/fav')) { m = '2-2'; t = '我的观察仓'; }
+                else if (path.includes('decision')) { m = '3-1'; t = '决策中心'; }
 
                 const activeMenu = ref(m);
                 const pageTitle = ref(t);
+                const isCollapse = ref(false);
                 const go = (url) => window.location.href = url;
+                const toggleCollapse = () => { isCollapse.value = !isCollapse.value; };
 
                 // 🔥 核心：全局消息轮询 (每10秒检查一次策略命中)
                 const startPolling = () => {
@@ -86,13 +202,13 @@
                                     });
                                 });
                             }
-                        } catch(e) { console.log('Polling error', e); }
+                        } catch (e) { console.log('Polling error', e); }
                     }, 10000);
                 };
 
                 onMounted(startPolling);
 
-                return { activeMenu, pageTitle, go, ...window.pageSetup() };
+                return { activeMenu, pageTitle, go, isCollapse, toggleCollapse, ...window.pageSetup() };
             }
         });
         app.use(ElementPlus);
@@ -100,4 +216,5 @@
         app.mount('#app');
     </script>
 </body>
+
 </html>

@@ -4,46 +4,68 @@
 {% block content %}
 <el-row :gutter="20">
     <el-col :span="6">
-        <el-card shadow="hover" class="metric-card">
-            <div class="label">📈 上证指数</div>
-            <div class="value" :class="currentSnapshot.is_up ? 'red' : 'green'">
-                [[ currentSnapshot.price || '--' ]]
-                <small>[[ currentSnapshot.change || '--' ]]</small>
+        <el-card shadow="hover" :body-style="{ padding: '20px' }">
+            <div class="metric-card">
+                <div class="metric-icon blue"><el-icon><Trend-Charts /></el-icon></div>
+                <div class="metric-content">
+                    <div class="metric-label">上证指数</div>
+                    <div class="metric-value">
+                        [[ currentSnapshot.price || '--' ]]
+                    </div>
+                    <div class="metric-sub" :class="currentSnapshot.is_up ? 'red' : 'green'">
+                        <span v-if="currentSnapshot.is_up">▲</span><span v-else>▼</span>
+                        [[ currentSnapshot.change || '--' ]]
+                    </div>
+                </div>
             </div>
-            <div class="sub">成交额: [[ currentSnapshot.volume || '--' ]]</div>
         </el-card>
     </el-col>
     <el-col :span="6">
-        <el-card shadow="hover" class="metric-card">
-            <div class="label">🔥 市场情绪</div>
-            <div class="value">[[market.up_count]] 家上涨</div>
-            <el-progress
-                :percentage="(market.up_count + market.down_count) > 0 ? (market.up_count / (market.up_count + market.down_count) * 100) : 0"
-                :show-text="false"
-                color="#F56C6C">
-            </el-progress>
-            <div class="sub">[[market.down_count]] 家下跌 | 热门: [[market.hot_sector]]</div>
+        <el-card shadow="hover" :body-style="{ padding: '20px' }">
+            <div class="metric-card">
+                <div class="metric-icon red"><el-icon>
+                        <Histogram />
+                    </el-icon></div>
+                <div class="metric-content">
+                    <div class="metric-label">市场情绪</div>
+                    <div class="metric-value">[[market.up_count]] <small style="font-size:14px;color:#999">家涨</small>
+                    </div>
+                    <el-progress
+                        :percentage="(market.up_count + market.down_count) > 0 ? (market.up_count / (market.up_count + market.down_count) * 100) : 0"
+                        :show-text="false" :stroke-width="6" color="#ff4d4f"></el-progress>
+                </div>
+            </div>
         </el-card>
     </el-col>
     <el-col :span="6">
-        <el-card shadow="hover" class="metric-card">
-            <div class="label">💰 资金流向</div>
-            <div class="value red">+32.5亿 <small>北向</small></div>
-            <div class="sub">主力净流: -15.2亿</div>
+        <el-card shadow="hover" :body-style="{ padding: '20px' }">
+            <div class="metric-card">
+                <div class="metric-icon purple"><el-icon>
+                        <Money />
+                    </el-icon></div>
+                <div class="metric-content">
+                    <div class="metric-label">主力净流</div>
+                    <div class="metric-value green">-15.2亿</div>
+                    <div class="metric-sub">北向资金: <span class="red">+32.5亿</span></div>
+                </div>
+            </div>
         </el-card>
     </el-col>
     <el-col :span="6">
-        <el-card shadow="hover" class="metric-card action" @click="go('/api/pattern/lab/')">
-            <div class="label" style="color:#409EFF">🎨 策略实验室</div>
-            <div class="value" style="font-size:18px">绘制新策略 ></div>
-            <div class="sub">自定义形态 / K线组合</div>
+        <el-card shadow="hover" :body-style="{ padding: '20px' }" class="action-card" @click="go('/api/pattern/lab/')">
+            <div class="metric-icon green"
+                style="width:40px;height:40px;margin-bottom:5px;margin-right:0;font-size:20px"><el-icon>
+                    <Edit />
+                </el-icon></div>
+            <div style="font-weight:600; color:#333">策略实验室</div>
+            <div style="font-size:12px; color:#999">绘制/回测新形态</div>
         </el-card>
     </el-col>
 </el-row>
 
 <el-row :gutter="20" style="margin-top:20px">
-    <el-col :span="18">
-        <el-card>
+    <el-col :span="24">
+        <el-card shadow="hover">
             <template #header>
                 <div style="display:flex; justify-content:space-between; align-items:center">
                     <span>📊 核心指数趋势 (三窗联动)</span>
@@ -53,7 +75,8 @@
                             <el-radio-button label="KDJ">KDJ</el-radio-button>
                             <el-radio-button label="RSI">RSI</el-radio-button>
                         </el-radio-group>
-                        <el-select v-model="indexType" placeholder="选择指数" size="small" style="width:120px" @change="loadData">
+                        <el-select v-model="indexType" placeholder="选择指数" size="small" style="width:120px"
+                            @change="loadData">
                             <el-option label="上证指数" value="000001.SH"></el-option>
                             <el-option label="深证成指" value="399001.SZ"></el-option>
                             <el-option label="创业板指" value="399006.SZ"></el-option>
@@ -65,15 +88,37 @@
             <div id="main-chart" style="height:550px"></div>
         </el-card>
     </el-col>
+</el-row>
 
-    <el-col :span="6">
-        <el-card header="🚀 实时信号预警" style="height:640px; overflow-y:auto">
-            <div v-for="item in signals" :key="item.code" class="signal-item" @click="showSignalDetail(item)">
-                <div class="s-head"><span>[[item.name]]</span> <el-tag size="small" effect="dark" type="danger">[[item.pattern]]</el-tag></div>
-                <div class="s-info">[[item.code]] <span class="red">[[item.change]]%</span></div>
-            </div>
-            <div style="margin-top:20px; text-align:center">
-                <el-button type="primary" plain style="width:100%" @click="go('/api/analysis/scan/')">进入全市场扫描</el-button>
+<el-row :gutter="20" style="margin-top:20px">
+    <el-col :span="24">
+        <el-card shadow="hover" header="🚀 实时信号预警中心">
+            <el-table :data="signals" style="width: 100%" stripe @row-click="showSignalDetail" highlight-current-row
+                class="signal-table">
+                <el-table-column prop="name" label="名称" width="120">
+                    <template #default="scope">
+                        <span style="font-weight:bold">[[ scope.row.name ]]</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="code" label="代码" width="120"></el-table-column>
+                <el-table-column prop="pattern" label="触发形态">
+                    <template #default="scope">
+                        <el-tag effect="plain" type="danger">[[ scope.row.pattern ]]</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="最新涨跌" width="150">
+                    <template #default="scope">
+                        <span class="red" style="font-weight:bold">[[ scope.row.change ]]%</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作" width="150" align="right">
+                    <template #default="scope">
+                        <el-button size="small" type="primary" plain round>深度分析</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+            <div style="margin-top:15px; text-align:center">
+                <el-button type="info" link @click="go('/api/analysis/scan/')">查看更多扫描结果 >></el-button>
             </div>
         </el-card>
     </el-col>
@@ -116,189 +161,305 @@
 
 {% block scripts %}
 <style>
-    .metric-card { height:120px; display:flex; flex-direction:column; justify-content:center }
-    .label { font-size:12px; color:#909399; margin-bottom:5px }
-    .value { font-size:20px; font-weight:bold; margin-bottom:5px }
-    .sub { font-size:12px; color:#C0C4CC }
-    .red{color:#F56C6C} .green{color:#67C23A}
-    .action:hover { border-color:#409EFF; cursor:pointer }
-    .signal-item { padding:10px; border-bottom:1px solid #eee; cursor:pointer; transition:0.2s } .signal-item:hover{background:#f5f7fa}
-    .s-head { display:flex; justify-content:space-between; font-weight:bold }
-    .info-box { background:#f9f9f9; padding:15px; border-radius:4px; border:1px solid #eee; }
-    .info-box h4 { margin:0 0 10px 0; color:#303133; }
-    .info-box p { margin:5px 0; font-size:13px; color:#606266; display:flex; justify-content:space-between; }
+    .metric-card {
+        height: 100px;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+    }
+
+    .metric-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        font-size: 28px;
+    }
+
+    .metric-icon.blue {
+        background: #e6f7ff;
+        color: #1890ff;
+    }
+
+    .metric-icon.red {
+        background: #fff1f0;
+        color: #f5222d;
+    }
+
+    .metric-icon.green {
+        background: #f6ffed;
+        color: #52c41a;
+    }
+
+    .metric-icon.purple {
+        background: #f9f0ff;
+        color: #722ed1;
+    }
+
+    .metric-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .metric-label {
+        font-size: 14px;
+        color: #8c8c8c;
+        margin-bottom: 4px;
+    }
+
+    .metric-value {
+        font-size: 24px;
+        font-weight: 600;
+        color: #000;
+        line-height: 1.2;
+    }
+
+    .metric-sub {
+        font-size: 12px;
+        color: #bfbfbf;
+        margin-top: 4px;
+    }
+
+    .red {
+        color: #F56C6C
+    }
+
+    .green {
+        color: #67C23A
+    }
+
+    .action-card {
+        text-align: center;
+        height: 100px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+    }
+
+    .action-card:hover {
+        transform: translateY(-2px);
+        transition: all 0.3s;
+    }
+
+    .signal-item {
+        padding: 12px 15px;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .signal-table {
+        cursor: pointer;
+    }
+
+    .s-head {
+        font-weight: 500;
+        color: #303133
+    }
+
+    .info-box {
+        background: #fafafa;
+        padding: 15px;
+        border-radius: 6px;
+        border: 1px solid #f0f0f0;
+    }
+
+    .info-box h4 {
+        margin: 0 0 10px 0;
+        color: #1f1f1f;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .info-box p {
+        margin: 6px 0;
+        font-size: 13px;
+        color: #595959;
+        display: flex;
+        justify-content: space-between;
+    }
 </style>
 <script>
-function pageSetup() {
-    const { ref, onMounted } = Vue;
-    const market = ref({ up_count:0, down_count:0, volume:'--', hot_sector:'--' });
-    const currentSnapshot = ref({ price:'--', change:'--', is_up:true, volume:'--' });
-    const signals = ref([]);
-    const indexType = ref('000001.SH');
-    const currIndicator = ref('MACD');
+    function pageSetup() {
+        const { ref, onMounted } = Vue;
+        const market = ref({ up_count: 0, down_count: 0, volume: '--', hot_sector: '--' });
+        const currentSnapshot = ref({ price: '--', change: '--', is_up: true, volume: '--' });
+        const signals = ref([]);
+        const indexType = ref('000001.SH');
+        const currIndicator = ref('MACD');
 
-    const detailVisible = ref(false);
-    const currSignal = ref({});
-    const stockInfo = ref({});
-    let chart1=null, chart2=null;
-    let cachedIndexData = null;
+        const detailVisible = ref(false);
+        const currSignal = ref({});
+        const stockInfo = ref({});
+        let chart1 = null, chart2 = null;
+        let cachedIndexData = null;
 
-    const init = () => { loadData(); };
+        const init = () => { loadData(); };
 
-    const loadData = async () => {
-        try {
-            const res = await axios.get(`/api/dashboard/data/?type=${indexType.value}`);
-            if (res.data.code === 200 && res.data.data) {
-                market.value = res.data.data.market || {};
-                currentSnapshot.value = res.data.data.snapshot || {};
-                signals.value = res.data.data.signals || [];
-                cachedIndexData = res.data.data.index_data;
-                renderMainChart();
-            }
-        } catch(e) { console.error(e); }
-    };
-
-    const refreshChart = () => { if(cachedIndexData) renderMainChart(); };
-
-    // 🔥 首页大盘：三窗联动 + 中文 Tooltip
-    const renderMainChart = () => {
-        if(!cachedIndexData) return;
-        if(chart1) chart1.dispose();
-        chart1 = echarts.init(document.getElementById('main-chart'));
-
-        const d = cachedIndexData;
-        const ind = d.indicators;
-
-        let indSeries = [];
-        if(currIndicator.value === 'MACD') {
-            indSeries = [
-                {name:'MACD', type:'bar', xAxisIndex:2, yAxisIndex:2, data:ind.MACD, itemStyle:{color:p=>p.value>0?'#ef232a':'#14b143'}},
-                {name:'DIF', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DIF, symbol:'none', lineStyle:{width:1}},
-                {name:'DEA', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DEA, symbol:'none', lineStyle:{width:1}}
-            ];
-        } else if(currIndicator.value === 'KDJ') {
-            indSeries = [
-                {name:'K', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.K, symbol:'none', lineStyle:{width:1}},
-                {name:'D', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.D, symbol:'none', lineStyle:{width:1}},
-                {name:'J', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.J, symbol:'none', lineStyle:{width:1}}
-            ];
-        } else {
-            indSeries = [{name:'RSI', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.RSI, symbol:'none', lineStyle:{width:1}}];
-        }
-
-        chart1.setOption({
-            tooltip: {
-                trigger:'axis', axisPointer:{type:'cross'},
-                // 🔥 修复：中文 Tooltip Formatter
-                formatter: function (params) {
-                    let res = `<div style="margin-bottom:5px;font-weight:bold">${params[0].name}</div>`;
-                    params.forEach(p => {
-                        if(p.seriesName === 'K线') {
-                            const open = p.data[1], close = p.data[2], low = p.data[3], high = p.data[4];
-                            // 计算涨跌幅
-                            const chg = ((close - open) / open * 100).toFixed(2);
-                            const color = chg >= 0 ? '#ef232a' : '#14b143';
-                            res += `K线：<span style="color:${color}">收盘 ${close} (幅${chg}%)</span><br/>`;
-                            res += `&nbsp;&nbsp;&nbsp;&nbsp;开盘 ${open} 最高 ${high} 最低 ${low}<br/>`;
-                        } else if(p.seriesName === '成交量') {
-                            // 格式化成交量 (亿/万)
-                            let valStr = p.data;
-                            if (p.data > 100000000) valStr = (p.data / 100000000).toFixed(2) + '亿';
-                            else if (p.data > 10000) valStr = (p.data / 10000).toFixed(2) + '万';
-                            res += `成交量：${valStr}<br/>`;
-                        } else {
-                            // 指标数值
-                            res += `${p.seriesName}：${p.value ? p.value.toFixed(2) : '--'}<br/>`;
-                        }
-                    });
-                    return res;
+        const loadData = async () => {
+            try {
+                const res = await axios.get(`/api/dashboard/data/?type=${indexType.value}`);
+                if (res.data.code === 200 && res.data.data) {
+                    market.value = res.data.data.market || {};
+                    currentSnapshot.value = res.data.data.snapshot || {};
+                    signals.value = res.data.data.signals || [];
+                    cachedIndexData = res.data.data.index_data;
+                    renderMainChart();
                 }
-            },
-            legend: { top:0, data:['K线','MA5','MA20','成交量',currIndicator.value] },
-            grid: [{left:'5%', right:'5%', height:'50%'}, {left:'5%', right:'5%', top:'62%', height:'15%'}, {left:'5%', right:'5%', top:'80%', height:'15%'}],
-            xAxis: [{type:'category', data:d.dates, boundaryGap:false, axisLine:{onZero:false}}, {type:'category', gridIndex:1, data:d.dates, show:false}, {type:'category', gridIndex:2, data:d.dates, show:false}],
-            yAxis: [{scale:true, splitArea:{show:true}}, {gridIndex:1, splitNumber:2, axisLabel:{show:false}, axisTick:{show:false}}, {gridIndex:2, splitNumber:2, axisLabel:{show:false}, axisTick:{show:false}}],
-            dataZoom: [{type:'inside', xAxisIndex:[0,1,2], start:60, end:100}, {type:'slider', xAxisIndex:[0,1,2], bottom:0}],
-            series: [
-                {name:'K线', type:'candlestick', data:d.values.map(v=>[v[0],v[1],v[2],v[3]]), itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
-                {name:'MA5', type:'line', data:ind.MA5, smooth:true, lineStyle:{opacity:0.5}},
-                {name:'MA20', type:'line', data:ind.MA20, smooth:true, lineStyle:{opacity:0.5}},
-                {name:'成交量', type:'bar', xAxisIndex:1, yAxisIndex:1, data:d.values.map(v=>v[4]), itemStyle:{color: (p) => d.values[p.dataIndex][1]>d.values[p.dataIndex][0] ? '#ef232a' : '#14b143'} },
-                ...indSeries
-            ]
-        });
-    };
+            } catch (e) { console.error(e); }
+        };
 
-    const showSignalDetail = (item) => { currSignal.value = item; detailVisible.value = true; };
+        const refreshChart = () => { if (cachedIndexData) renderMainChart(); };
 
-    // 弹窗详情图表
-    const renderDetailChart = async () => {
-        if(chart2) { chart2.dispose(); chart2 = null; }
+        // 🔥 首页大盘：三窗联动 + 中文 Tooltip
+        const renderMainChart = () => {
+            if (!cachedIndexData) return;
+            if (chart1) chart1.dispose();
+            chart1 = echarts.init(document.getElementById('main-chart'));
 
-        const res = await axios.get(`/api/stock/detail/?code=${currSignal.value.code}`);
-        if(res.data.code !== 200) return;
-        const d = res.data.data;
-        stockInfo.value = { basic: d.basic, funds: d.funds };
-
-        setTimeout(() => {
-            const dom = document.getElementById('detail-kline');
-            if(!dom) return;
-            chart2 = echarts.init(dom);
-
+            const d = cachedIndexData;
             const ind = d.indicators;
+
             let indSeries = [];
-            if(currIndicator.value === 'MACD') {
-                indSeries = [{name:'MACD', type:'bar', xAxisIndex:2, yAxisIndex:2, data:ind.MACD, itemStyle:{color:p=>p.value>0?'#ef232a':'#14b143'}},{name:'DIF', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DIF, symbol:'none'},{name:'DEA', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.DEA, symbol:'none'}];
-            } else if(currIndicator.value === 'KDJ') {
-                indSeries = [{name:'K', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.K, symbol:'none'},{name:'D', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.D, symbol:'none'},{name:'J', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.J, symbol:'none'}];
+            if (currIndicator.value === 'MACD') {
+                indSeries = [
+                    { name: 'MACD', type: 'bar', xAxisIndex: 2, yAxisIndex: 2, data: ind.MACD, itemStyle: { color: p => p.value > 0 ? '#ef232a' : '#14b143' } },
+                    { name: 'DIF', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.DIF, symbol: 'none', lineStyle: { width: 1 } },
+                    { name: 'DEA', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.DEA, symbol: 'none', lineStyle: { width: 1 } }
+                ];
+            } else if (currIndicator.value === 'KDJ') {
+                indSeries = [
+                    { name: 'K', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.K, symbol: 'none', lineStyle: { width: 1 } },
+                    { name: 'D', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.D, symbol: 'none', lineStyle: { width: 1 } },
+                    { name: 'J', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.J, symbol: 'none', lineStyle: { width: 1 } }
+                ];
             } else {
-                indSeries = [{name:'RSI', type:'line', xAxisIndex:2, yAxisIndex:2, data:ind.RSI, symbol:'none'}];
+                indSeries = [{ name: 'RSI', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.RSI, symbol: 'none', lineStyle: { width: 1 } }];
             }
 
-            chart2.setOption({
+            chart1.setOption({
                 tooltip: {
-                    trigger:'axis', axisPointer:{type:'cross'},
-                    // 🔥 修复：弹窗也使用中文 Tooltip
+                    trigger: 'axis', axisPointer: { type: 'cross' },
+                    // 🔥 修复：中文 Tooltip Formatter
                     formatter: function (params) {
                         let res = `<div style="margin-bottom:5px;font-weight:bold">${params[0].name}</div>`;
                         params.forEach(p => {
-                            if(p.seriesName === 'K线') {
+                            if (p.seriesName === 'K线') {
                                 const open = p.data[1], close = p.data[2], low = p.data[3], high = p.data[4];
+                                // 计算涨跌幅
                                 const chg = ((close - open) / open * 100).toFixed(2);
                                 const color = chg >= 0 ? '#ef232a' : '#14b143';
-                                res += `K线：<span style="color:${color}">收${close} (幅${chg}%)</span><br/>`;
-                                res += `&nbsp;&nbsp;&nbsp;&nbsp;开${open} 高${high} 低${low}<br/>`;
-                            } else if(p.seriesName === '成交量') {
-                                res += `成交量：${p.data}<br/>`;
+                                res += `K线：<span style="color:${color}">收盘 ${close} (幅${chg}%)</span><br/>`;
+                                res += `&nbsp;&nbsp;&nbsp;&nbsp;开盘 ${open} 最高 ${high} 最低 ${low}<br/>`;
+                            } else if (p.seriesName === '成交量') {
+                                // 格式化成交量 (亿/万)
+                                let valStr = p.data;
+                                if (p.data > 100000000) valStr = (p.data / 100000000).toFixed(2) + '亿';
+                                else if (p.data > 10000) valStr = (p.data / 10000).toFixed(2) + '万';
+                                res += `成交量：${valStr}<br/>`;
                             } else {
+                                // 指标数值
                                 res += `${p.seriesName}：${p.value ? p.value.toFixed(2) : '--'}<br/>`;
                             }
                         });
                         return res;
                     }
                 },
-                legend: { top:0, data:['K线','MA5','MA20','成交量',currIndicator.value] },
-                grid: [{left:'8%',right:'5%',height:'45%'}, {left:'8%',right:'5%',top:'58%',height:'15%'}, {left:'8%',right:'5%',top:'78%',height:'15%'}],
-                xAxis: [{type:'category', data:d.dates, boundaryGap:false, axisLine:{onZero:false}}, {type:'category', gridIndex:1, data:d.dates, show:false}, {type:'category', gridIndex:2, data:d.dates, show:false}],
-                yAxis: [{scale:true, splitArea:{show:true}}, {gridIndex:1, splitNumber:2, axisLabel:{show:false}}, {gridIndex:2, splitNumber:2, axisLabel:{show:false}}],
-                dataZoom: [{type:'inside', xAxisIndex:[0,1,2], start:50, end:100}, {type:'slider', xAxisIndex:[0,1,2], bottom:0}],
+                legend: { top: 0, data: ['K线', 'MA5', 'MA20', '成交量', currIndicator.value] },
+                grid: [{ left: '5%', right: '5%', height: '50%' }, { left: '5%', right: '5%', top: '62%', height: '15%' }, { left: '5%', right: '5%', top: '80%', height: '15%' }],
+                xAxis: [{ type: 'category', data: d.dates, boundaryGap: false, axisLine: { onZero: false } }, { type: 'category', gridIndex: 1, data: d.dates, show: false }, { type: 'category', gridIndex: 2, data: d.dates, show: false }],
+                yAxis: [{ scale: true, splitArea: { show: true } }, { gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisTick: { show: false } }, { gridIndex: 2, splitNumber: 2, axisLabel: { show: false }, axisTick: { show: false } }],
+                dataZoom: [{ type: 'inside', xAxisIndex: [0, 1, 2], start: 60, end: 100 }, { type: 'slider', xAxisIndex: [0, 1, 2], bottom: 0 }],
                 series: [
-                    {name:'K线', type:'candlestick', data:d.values.map(v=>[v[0],v[1],v[2],v[3]]), itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}},
-                    {name:'MA5', type:'line', data:ind.MA5, smooth:true, lineStyle:{opacity:0.5}},
-                    {name:'MA20', type:'line', data:ind.MA20, smooth:true, lineStyle:{opacity:0.5}},
-                    {name:'成交量', type:'bar', xAxisIndex:1, yAxisIndex:1, data:d.values.map(v=>v[4]), itemStyle:{color:p=>d.values[p.dataIndex][1]>d.values[p.dataIndex][0]?'#ef232a':'#14b143'}},
+                    { name: 'K线', type: 'candlestick', data: d.values.map(v => [v[0], v[1], v[2], v[3]]), itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' } },
+                    { name: 'MA5', type: 'line', data: ind.MA5, smooth: true, lineStyle: { opacity: 0.5 } },
+                    { name: 'MA20', type: 'line', data: ind.MA20, smooth: true, lineStyle: { opacity: 0.5 } },
+                    { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: d.values.map(v => v[4]), itemStyle: { color: (p) => d.values[p.dataIndex][1] > d.values[p.dataIndex][0] ? '#ef232a' : '#14b143' } },
                     ...indSeries
                 ]
             });
-        }, 50);
-    };
+        };
 
-    const addToFav = async () => {
-        try { await axios.post('/api/favorite/add/', {code: currSignal.value.code}); ElementPlus.ElMessage.success('已成功加入观察仓'); } catch(e) { ElementPlus.ElMessage.error('添加失败'); }
-    };
+        const showSignalDetail = (item) => { currSignal.value = item; detailVisible.value = true; };
 
-    onMounted(init);
-    return { market, currentSnapshot, signals, indexType, loadData, detailVisible, currSignal, showSignalDetail, renderDetailChart, stockInfo, currIndicator, addToFav, refreshChart };
-}
+        // 弹窗详情图表
+        const renderDetailChart = async () => {
+            if (chart2) { chart2.dispose(); chart2 = null; }
+
+            const res = await axios.get(`/api/stock/detail/?code=${currSignal.value.code}`);
+            if (res.data.code !== 200) return;
+            const d = res.data.data;
+            stockInfo.value = { basic: d.basic, funds: d.funds };
+
+            setTimeout(() => {
+                const dom = document.getElementById('detail-kline');
+                if (!dom) return;
+                chart2 = echarts.init(dom);
+
+                const ind = d.indicators;
+                let indSeries = [];
+                if (currIndicator.value === 'MACD') {
+                    indSeries = [{ name: 'MACD', type: 'bar', xAxisIndex: 2, yAxisIndex: 2, data: ind.MACD, itemStyle: { color: p => p.value > 0 ? '#ef232a' : '#14b143' } }, { name: 'DIF', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.DIF, symbol: 'none' }, { name: 'DEA', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.DEA, symbol: 'none' }];
+                } else if (currIndicator.value === 'KDJ') {
+                    indSeries = [{ name: 'K', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.K, symbol: 'none' }, { name: 'D', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.D, symbol: 'none' }, { name: 'J', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.J, symbol: 'none' }];
+                } else {
+                    indSeries = [{ name: 'RSI', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.RSI, symbol: 'none' }];
+                }
+
+                chart2.setOption({
+                    tooltip: {
+                        trigger: 'axis', axisPointer: { type: 'cross' },
+                        // 🔥 修复：弹窗也使用中文 Tooltip
+                        formatter: function (params) {
+                            let res = `<div style="margin-bottom:5px;font-weight:bold">${params[0].name}</div>`;
+                            params.forEach(p => {
+                                if (p.seriesName === 'K线') {
+                                    const open = p.data[1], close = p.data[2], low = p.data[3], high = p.data[4];
+                                    const chg = ((close - open) / open * 100).toFixed(2);
+                                    const color = chg >= 0 ? '#ef232a' : '#14b143';
+                                    res += `K线：<span style="color:${color}">收${close} (幅${chg}%)</span><br/>`;
+                                    res += `&nbsp;&nbsp;&nbsp;&nbsp;开${open} 高${high} 低${low}<br/>`;
+                                } else if (p.seriesName === '成交量') {
+                                    res += `成交量：${p.data}<br/>`;
+                                } else {
+                                    res += `${p.seriesName}：${p.value ? p.value.toFixed(2) : '--'}<br/>`;
+                                }
+                            });
+                            return res;
+                        }
+                    },
+                    legend: { top: 0, data: ['K线', 'MA5', 'MA20', '成交量', currIndicator.value] },
+                    grid: [{ left: '8%', right: '5%', height: '45%' }, { left: '8%', right: '5%', top: '58%', height: '15%' }, { left: '8%', right: '5%', top: '78%', height: '15%' }],
+                    xAxis: [{ type: 'category', data: d.dates, boundaryGap: false, axisLine: { onZero: false } }, { type: 'category', gridIndex: 1, data: d.dates, show: false }, { type: 'category', gridIndex: 2, data: d.dates, show: false }],
+                    yAxis: [{ scale: true, splitArea: { show: true } }, { gridIndex: 1, splitNumber: 2, axisLabel: { show: false } }, { gridIndex: 2, splitNumber: 2, axisLabel: { show: false } }],
+                    dataZoom: [{ type: 'inside', xAxisIndex: [0, 1, 2], start: 50, end: 100 }, { type: 'slider', xAxisIndex: [0, 1, 2], bottom: 0 }],
+                    series: [
+                        { name: 'K线', type: 'candlestick', data: d.values.map(v => [v[0], v[1], v[2], v[3]]), itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' } },
+                        { name: 'MA5', type: 'line', data: ind.MA5, smooth: true, lineStyle: { opacity: 0.5 } },
+                        { name: 'MA20', type: 'line', data: ind.MA20, smooth: true, lineStyle: { opacity: 0.5 } },
+                        { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: d.values.map(v => v[4]), itemStyle: { color: p => d.values[p.dataIndex][1] > d.values[p.dataIndex][0] ? '#ef232a' : '#14b143' } },
+                        ...indSeries
+                    ]
+                });
+            }, 50);
+        };
+
+        const addToFav = async () => {
+            try { await axios.post('/api/favorite/add/', { code: currSignal.value.code }); ElementPlus.ElMessage.success('已成功加入观察仓'); } catch (e) { ElementPlus.ElMessage.error('添加失败'); }
+        };
+
+        onMounted(init);
+        return { market, currentSnapshot, signals, indexType, loadData, detailVisible, currSignal, showSignalDetail, renderDetailChart, stockInfo, currIndicator, addToFav, refreshChart };
+    }
 </script>
 {% endblock %}

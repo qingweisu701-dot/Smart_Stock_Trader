@@ -1,0 +1,12 @@
+Django==4.2
+djangorestframework
+pandas
+numpy
+scikit-learn
+matplotlib
+echarts-python
+requests
+akshare
+mysqlclient
+fastdtw
+scipy

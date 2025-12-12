@@ -1,110 +1,267 @@
 {% extends 'base.html' %}
-{% block title %}市场智能扫描{% endblock %}
-{% block content %}
-<el-container style="height:85vh; border:1px solid #eee">
-    <el-aside width="320px" style="padding:15px; background:#fff; overflow-y:auto">
-        <h3>🔍 智能筛选</h3>
-        <el-form label-position="top">
-            <el-form-item label="1. 形态匹配">
-                <el-select v-model="filters.patternId" placeholder="选择形态" clearable style="width:100%">
-                    <el-option-group label="📈 预设看涨"><el-option v-for="p in presets.buy" :key="p.id" :label="p.name" :value="'PRESET:'+p.id"/></el-option-group>
-                    <el-option-group label="📉 预设看跌"><el-option v-for="p in presets.sell" :key="p.id" :label="p.name" :value="'PRESET:'+p.id"/></el-option-group>
-                    <el-option-group label="👤 我的"><el-option v-for="p in presets.user" :key="p.id" :label="p.name" :value="'USER:'+p.id"/></el-option-group>
-                </el-select>
-            </el-form-item>
-            <el-form-item label="2. 指标筛选">
-                <el-checkbox-group v-model="filters.strategies">
-                    <el-checkbox label="MA_GOLD">均线金叉</el-checkbox>
-                    <el-checkbox label="MACD_GOLD">MACD金叉</el-checkbox>
-                </el-checkbox-group>
-            </el-form-item>
-            <el-form-item label="3. 价格区间(OHLC)">
-                <el-row :gutter="5"><el-col :span="12"><el-input v-model="filters.minClose" placeholder="收盘Min"/></el-col><el-col :span="12"><el-input v-model="filters.maxClose" placeholder="Max"/></el-input></el-col></el-row>
-            </el-form-item>
-            <el-form-item label="4. 市值规模">
-                <el-select v-model="filters.marketCap" style="width:100%">
-                    <el-option label="全部" value=""></el-option>
-                    <el-option label="大盘 (>200亿)" value="LARGE"></el-option>
-                    <el-option label="中盘 (50-200亿)" value="MID"></el-option>
-                    <el-option label="小盘 (<50亿)" value="SMALL"></el-option>
-                </el-select>
-            </el-form-item>
-            <el-button type="primary" style="width:100%" @click="runScan" :loading="loading">扫描市场</el-button>
-        </el-form>
-    </el-aside>
+{% block title %}量化决策中心{% endblock %}
 
-    <el-main>
-        <div v-if="results.length > 0">
-            <el-alert :title="`扫描到 ${results.length} 支股票`" type="success" :closable="false" style="margin-bottom:10px"/>
-            <el-table :data="results" stripe border height="100%">
-                <el-table-column prop="code" label="代码" width="100"></el-table-column>
-                <el-table-column prop="name" label="名称" width="120"></el-table-column>
-                <el-table-column label="信号建议">
-                    <template #default="s">
-                        <el-tag :type="s.row.match_type==='BUY'?'danger':'success'" effect="dark">
-                            [[ s.row.match_type==='BUY'?'买入':'卖出' ]]
-                        </el-tag>
-                    </template>
-                </el-table-column>
-                <el-table-column label="AI置信度" width="200">
-                    <template #default="s">
-                        <el-progress :percentage="s.row.confidence" :color="s.row.confidence>80?'#F56C6C':'#E6A23C'"/>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="price" label="现价"></el-table-column>
-                <el-table-column label="操作">
-                    <template #default="s">
-                        <el-button size="small" @click="addFav(s.row)">收藏</el-button>
-                    </template>
-                </el-table-column>
-            </el-table>
+{% block content %}
+<el-container style="height:85vh; padding:20px; background:#f0f2f5; display:flex; flex-direction:column">
+    <el-card shadow="never" style="margin-bottom:20px">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+            <div>
+                <span style="font-size:18px; font-weight:bold; margin-right:10px">🧠 智能决策中心 (AI Decision)</span>
+                <el-tag type="success">实时监控中</el-tag>
+            </div>
+            <div style="display:flex; gap:10px">
+                <el-button type="primary" @click="loadOpportunities" :loading="loading" icon="Refresh">刷新机会池</el-button>
+                <el-button type="info" plain @click="goHistory" icon="List">查看交易流水</el-button>
+            </div>
         </div>
-        <el-empty v-else description="请设置条件并扫描"></el-empty>
-    </el-main>
+    </el-card>
+
+    <el-card shadow="never" style="flex:1; overflow-y:auto">
+        <template #header>
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <span>🔥 机会池 (Smart Pool)</span>
+                <div style="display:flex; align-items:center; gap:10px">
+                    <span style="font-size:12px">最低置信度:</span>
+                    <el-input-number v-model="filters.minScore" :min="0" :max="100" size="small"
+                        style="width:100px"></el-input-number>
+                    <el-select v-model="filters.patternId" placeholder="筛选形态" size="small" clearable
+                        style="width:140px">
+                        <el-option-group label="系统预设">
+                            <el-option v-for="p in presets.sys" :key="p.id" :label="p.name"
+                                :value="'PRESET:'+p.id"></el-option>
+                        </el-option-group>
+                        <el-option-group label="自定义">
+                            <el-option v-for="p in presets.user" :key="p.id" :label="p.name"
+                                :value="'USER:'+p.id"></el-option>
+                        </el-option-group>
+                    </el-select>
+                </div>
+            </div>
+        </template>
+
+        <el-table :data="opportunities" stripe border style="width: 100%" @row-click="showDetail">
+            <el-table-column prop="code" label="标的代码" width="120" sortable>
+                <template #default="scope">
+                    <b style="color:#409EFF; cursor:pointer">[[ scope.row.code ]]</b>
+                </template>
+            </el-table-column>
+
+            <el-table-column prop="name" label="名称" width="120"></el-table-column>
+
+            <el-table-column label="现价" width="120">
+                <template #default="scope">
+                    <span style="font-weight:bold">[[ scope.row.price ]]</span>
+                </template>
+            </el-table-column>
+
+            <el-table-column label="触发信号" width="150">
+                <template #default="scope">
+                    <el-tag effect="dark" :type="scope.row.match_type==='BUY'?'danger':'success'">
+                        [[ scope.row.match_type==='BUY'?'机会':'风险' ]]
+                    </el-tag>
+                </template>
+            </el-table-column>
+
+            <el-table-column label="AI 建议" width="200">
+                <template #default="scope">
+                    <div style="font-size:12px">
+                        <span style="color:#F56C6C">建议买入: [[ scope.row.buy_point ]]</span><br>
+                        <span style="color:#67C23A">建议卖出: [[ scope.row.sell_point ]]</span>
+                    </div>
+                </template>
+            </el-table-column>
+
+            <el-table-column label="持仓周期" width="120" prop="holding_period"></el-table-column>
+
+            <el-table-column label="置信度" width="150">
+                <template #default="scope">
+                    <el-progress :percentage="scope.row.confidence"
+                        :color="scope.row.confidence>80?'#F56C6C':'#E6A23C'"></el-progress>
+                </template>
+            </el-table-column>
+
+            <el-table-column label="决策操作" width="200" fixed="right">
+                <template #default="scope">
+                    <el-button-group>
+                        <el-button size="small" type="primary" @click.stop="showDetail(scope.row)">趋势图</el-button>
+                        <el-button size="small" type="danger" @click.stop="openTrade(scope.row, 'BUY')">买入</el-button>
+                        <el-button size="small" type="success" @click.stop="openTrade(scope.row, 'SELL')">卖出</el-button>
+                    </el-button-group>
+                </template>
+            </el-table-column>
+        </el-table>
+    </el-card>
 </el-container>
+
+<el-dialog v-model="detailVisible" width="85%" title="深度走势分析" @opened="renderChart">
+    <div style="text-align:right; margin-bottom:5px">
+        <el-radio-group v-model="currIndicator" size="small" @change="renderChart">
+            <el-radio-button label="MACD">MACD</el-radio-button>
+            <el-radio-button label="KDJ">KDJ</el-radio-button>
+            <el-radio-button label="RSI">RSI</el-radio-button>
+        </el-radio-group>
+    </div>
+    <div id="decision-kline" style="height:500px"></div>
+</el-dialog>
+
+<el-dialog v-model="trade.visible" :title="trade.type === 'BUY' ? '🔴 买入委托' : '🟢 卖出委托'" width="30%">
+    <el-form label-position="top">
+        <el-alert title="交易将直接记录到交易流水中" type="info" :closable="false" style="margin-bottom:15px"></el-alert>
+
+        <el-form-item label="标的">
+            <el-tag size="large">[[ trade.name ]] ([[ trade.code ]])</el-tag>
+        </el-form-item>
+
+        <el-row :gutter="20">
+            <el-col :span="12">
+                <el-form-item label="委托价格">
+                    <el-input v-model="trade.price" type="number"></el-input>
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="委托数量">
+                    <el-input v-model="trade.volume" type="number" step="100"></el-input>
+                </el-form-item>
+            </el-col>
+        </el-row>
+
+        <el-form-item label="触发条件 (选填)">
+            <el-input v-model="trade.triggerValue" placeholder="例如：价格 >= 20.5"></el-input>
+        </el-form-item>
+    </el-form>
+
+    <template #footer>
+        <el-button @click="trade.visible=false">取消</el-button>
+        <el-button :type="trade.type === 'BUY' ? 'danger' : 'success'" @click="submitTrade">确认下单</el-button>
+    </template>
+</el-dialog>
 {% endblock %}
 
 {% block scripts %}
 <script>
-function pageSetup() {
-    const loading = ref(false);
-    const filters = ref({ patternId:'', strategies:[], minClose:'', maxClose:'', marketCap:'', sector:'' });
-    const presets = ref({ buy:[], sell:[], user:[] });
-    const results = ref([]);
+    function pageSetup() {
+        const { ref, onMounted } = Vue;
+        const loading = ref(false);
+        const opportunities = ref([]);
 
-    const init = async () => {
-        const res = await axios.get('/api/pattern/list/');
-        const all = res.data.data.presets;
-        presets.value.buy = all.filter(p=>p.type==='BUY');
-        presets.value.sell = all.filter(p=>p.type==='SELL');
-        presets.value.user = res.data.data.users;
-    };
+        // 图表相关
+        const detailVisible = ref(false);
+        const currCode = ref('');
+        const currIndicator = ref('MACD');
+        let chart = null;
 
-    const runScan = async () => {
-        loading.value = true;
-        try {
-            let pData = null;
-            if (filters.value.patternId) {
-                const [source, id] = filters.value.patternId.split(':');
-                if (source === 'PRESET') {
-                    pData = [...presets.value.buy, ...presets.value.sell].find(x => x.id === id).data;
-                } else {
-                    pData = presets.value.user.find(x => x.id == id).data;
+        // 交易相关
+        const trade = ref({ visible: false, type: 'BUY', code: '', name: '', price: 0, volume: 100, triggerValue: '' });
+
+        // 1. 加载机会池 (复用 Analysis 接口获取高质量形态)
+        const filters = ref({ minScore: 70, patternId: '' });
+        const presets = ref({ sys: [], user: [] });
+
+        // 初始化：加载形态列表
+        const init = async () => {
+            try {
+                const res = await axios.get('/api/pattern/list/');
+                presets.value.sys = res.data.data.presets;
+                presets.value.user = res.data.data.users;
+            } catch (e) { }
+        };
+
+        const loadOpportunities = async () => {
+            loading.value = true;
+            try {
+                let pData = null;
+                // 🔥 修复：根据选择的 patternId 查找对应的形态数据
+                if (filters.value.patternId) {
+                    const [type, id] = filters.value.patternId.split(':');
+                    const list = type === 'PRESET' ? presets.value.sys : presets.value.user;
+                    const found = list.find(x => x.id == id); // 注意类型可能不一致，用==
+                    if (found) pData = found.data;
                 }
+
+                const res = await axios.post('/api/analysis/run/', {
+                    pattern_data: pData,
+                    filters: filters.value
+                });
+                if (res.data.code === 200) {
+                    opportunities.value = res.data.data;
+                    // ElementPlus.ElMessage.success(`刷新成功，发现 ${res.data.data.length} 个机会`);
+                    if (opportunities.value.length === 0) ElementPlus.ElMessage.warning('暂无符合条件的机会，请调整阈值');
+                }
+            } catch (e) { ElementPlus.ElMessage.error('获取数据失败'); }
+            finally { loading.value = false; }
+        };
+
+        // 2. 显示图表 (三窗联动)
+        const showDetail = (row) => {
+            currCode.value = row.code;
+            detailVisible.value = true;
+        };
+
+        const renderChart = async () => {
+            if (chart) chart.dispose();
+            const res = await axios.get(`/api/stock/detail/?code=${currCode.value}`);
+            if (res.data.code !== 200) return ElementPlus.ElMessage.error('暂无数据');
+
+            const d = res.data.data;
+            const ind = d.indicators;
+            chart = echarts.init(document.getElementById('decision-kline'));
+
+            let indSeries = [];
+            if (currIndicator.value === 'MACD') {
+                indSeries = [{ name: 'MACD', type: 'bar', xAxisIndex: 2, yAxisIndex: 2, data: ind.MACD, itemStyle: { color: p => p.value > 0 ? '#ef232a' : '#14b143' } }, { name: 'DIF', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.DIF, symbol: 'none' }, { name: 'DEA', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.DEA, symbol: 'none' }];
+            } else if (currIndicator.value === 'KDJ') {
+                indSeries = [{ name: 'K', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.K, symbol: 'none' }, { name: 'D', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.D, symbol: 'none' }, { name: 'J', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.J, symbol: 'none' }];
+            } else {
+                indSeries = [{ name: 'RSI', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: ind.RSI, symbol: 'none' }];
             }
-            const res = await axios.post('/api/analysis/run/', { pattern_data: pData, filters: filters.value });
-            results.value = res.data.data;
-            if(results.value.length === 0) ElementPlus.ElMessage.info('无结果');
-        } finally { loading.value = false; }
-    };
 
-    const addFav = async (row) => {
-        await axios.post('/api/favorite/add/', {code:row.code});
-        ElementPlus.ElMessage.success('已收藏');
-    };
+            chart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { top: 0, data: ['K线', 'MA5', 'MA20', '成交量', currIndicator.value] },
+                grid: [{ left: '5%', right: '5%', height: '45%' }, { left: '5%', right: '5%', top: '58%', height: '15%' }, { left: '5%', right: '5%', top: '78%', height: '15%' }],
+                xAxis: [{ type: 'category', data: d.dates, scale: true, boundaryGap: false, axisLine: { onZero: false } }, { type: 'category', gridIndex: 1, data: d.dates, show: false }, { type: 'category', gridIndex: 2, data: d.dates, show: false }],
+                yAxis: [{ scale: true, splitArea: { show: true } }, { gridIndex: 1, splitNumber: 2, axisLabel: { show: false } }, { gridIndex: 2, splitNumber: 2, axisLabel: { show: false } }],
+                dataZoom: [{ type: 'inside', xAxisIndex: [0, 1, 2], start: 60, end: 100 }, { type: 'slider', xAxisIndex: [0, 1, 2], bottom: 0 }],
+                series: [
+                    { name: 'K线', type: 'candlestick', data: d.values.map(v => [v[0], v[1], v[2], v[3]]), itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' } },
+                    { name: 'MA5', type: 'line', data: ind.MA5, smooth: true, lineStyle: { opacity: 0.5 } },
+                    { name: 'MA20', type: 'line', data: ind.MA20, smooth: true, lineStyle: { opacity: 0.5 } },
+                    { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: d.values.map(v => v[4]), itemStyle: { color: p => d.values[p.dataIndex][1] > d.values[p.dataIndex][0] ? '#ef232a' : '#14b143' } },
+                    ...indSeries
+                ]
+            });
+        };
 
-    onMounted(init);
-    return { loading, filters, presets, results, runScan, addFav };
-}
+        // 3. 打开交易弹窗
+        const openTrade = (row, type) => {
+            trade.value.visible = true;
+            trade.value.type = type;
+            trade.value.code = row.code;
+            trade.value.name = row.name;
+            trade.value.price = row.price;
+            trade.value.volume = 100;
+            trade.value.triggerValue = '';
+        };
+
+        // 4. 提交交易
+        const submitTrade = async () => {
+            try {
+                await axios.post('/api/trade/order/', trade.value);
+                ElementPlus.ElMessage.success('委托已提交，请在交易流水中查看');
+                trade.value.visible = false;
+            } catch (e) {
+                ElementPlus.ElMessage.error('交易失败');
+            }
+        };
+
+        const goHistory = () => window.location.href = '/api/trade/history/';
+
+        onMounted(() => {
+            init();
+            loadOpportunities();
+        });
+
+        return { loading, opportunities, detailVisible, currCode, currIndicator, trade, loadOpportunities, showDetail, renderChart, openTrade, submitTrade, goHistory, filters, presets };
+    }
 </script>
 {% endblock %}

@@ -119,3 +119,12 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
+# Email Configuration (SMTP)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.qq.com'  # 替换为您的SMTP服务器，如 smtp.qq.com, smtp.163.com
+EMAIL_PORT = 465  # SSL端口
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = '3076095936@qq.com'  # 替换为您的邮箱账号
+EMAIL_HOST_PASSWORD = 'your_auth_token'  # 替换为您的邮箱授权码(非密码)
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

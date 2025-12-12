@@ -4,7 +4,7 @@
 {% block content %}
 <el-row :gutter="20" style="height:calc(100vh - 100px)">
     <el-col :span="16">
-        <el-card style="height:100%; display:flex; flex-direction:column">
+        <el-card shadow="hover" style="height:100%; display:flex; flex-direction:column">
             <template #header>
                 <div style="display:flex; justify-content:space-between; align-items:center">
                     <el-radio-group v-model="mode" size="small" @change="onModeChange">
@@ -13,9 +13,12 @@
                         <el-radio-button label="import">📊 数据导入</el-radio-button>
                     </el-radio-group>
                     <div style="display:flex; gap:10px">
-                        <el-button v-if="mode==='mouse'" size="small" type="danger" plain @click="clearDraw">清空画布</el-button>
+                        <el-button v-if="mode==='mouse'" size="small" type="danger" plain
+                            @click="clearDraw">清空画布</el-button>
                         <el-button type="primary" size="small" @click="prepareSave">
-                            <el-icon><check /></el-icon> 保存形态
+                            <el-icon>
+                                <check />
+                            </el-icon> 保存形态
                         </el-button>
                     </div>
                 </div>
@@ -28,18 +31,16 @@
                 <div id="draw-canvas" style="flex:1; border:1px dashed #ccc; min-height:400px; cursor:crosshair"></div>
             </div>
 
-            <div v-show="mode==='kline' || mode==='import'" style="height:100%; display:flex; flex-direction:column; overflow-y:auto">
+            <div v-show="mode==='kline' || mode==='import'"
+                style="height:100%; display:flex; flex-direction:column; overflow-y:auto">
 
                 <div v-if="mode==='import'" style="padding:15px; background:#f0f9eb; border-bottom:1px solid #e1f3d8">
                     <div style="font-weight:bold; margin-bottom:5px; color:#67C23A">批量导入日线数据</div>
-                    <el-input
-                        type="textarea" :rows="4"
-                        placeholder="请直接从 Excel 复制数据粘贴到这里，或手动输入。
+                    <el-input type="textarea" :rows="4" placeholder="请直接从 Excel 复制数据粘贴到这里，或手动输入。
 格式支持：日期 开盘 收盘 最低 最高 (或仅数值)
 例如：
 10.5 11.2 10.0 11.5
-11.2 10.8 10.5 11.3"
-                        v-model="importText">
+11.2 10.8 10.5 11.3" v-model="importText">
                     </el-input>
                     <div style="text-align:right; margin-top:8px">
                         <el-button size="small" @click="loadDemoData">填入示例</el-button>
@@ -53,22 +54,32 @@
 
                 <div id="kline-editor" style="height:350px; width:100%"></div>
 
-                <div v-if="selectedIdx !== null" class="editor-bar" style="background:#fff; padding:15px; border:1px solid #eee; margin-top:10px">
+                <div v-if="selectedIdx !== null" class="editor-bar"
+                    style="background:#fff; padding:15px; border:1px solid #eee; margin-top:10px">
                     <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px">
                         <span style="color:#409EFF">正在编辑第 [[selectedIdx+1]] 根</span>
                     </div>
                     <el-row :gutter="20">
-                        <el-col :span="6"><span class="label">最高价</span><el-slider v-model="curr.high" :max="100" @input="updateChart"/></el-col>
-                        <el-col :span="6"><span class="label">最低价</span><el-slider v-model="curr.low" :max="100" @input="updateChart"/></el-col>
-                        <el-col :span="6"><span class="label">开盘价</span><el-slider v-model="curr.open" :max="100" @input="updateChart"/></el-col>
-                        <el-col :span="6"><span class="label">收盘价</span><el-slider v-model="curr.close" :max="100" @input="updateChart"/></el-col>
+                        <el-col :span="6"><span class="label">最高价</span><el-slider v-model="curr.high" :max="100"
+                                @input="updateChart" /></el-col>
+                        <el-col :span="6"><span class="label">最低价</span><el-slider v-model="curr.low" :max="100"
+                                @input="updateChart" /></el-col>
+                        <el-col :span="6"><span class="label">开盘价</span><el-slider v-model="curr.open" :max="100"
+                                @input="updateChart" /></el-col>
+                        <el-col :span="6"><span class="label">收盘价</span><el-slider v-model="curr.close" :max="100"
+                                @input="updateChart" /></el-col>
                     </el-row>
                 </div>
 
                 <div style="text-align:center; margin-top:10px; padding-bottom:20px">
                     <el-button-group>
-                        <el-button size="small" type="success" @click="addCandle"><el-icon><plus /></el-icon> 追加一根</el-button>
-                        <el-button size="small" type="danger" @click="removeCandle" :disabled="selectedIdx===null"><el-icon><minus /></el-icon> 删除选中</el-button>
+                        <el-button size="small" type="success" @click="addCandle"><el-icon>
+                                <plus />
+                            </el-icon> 追加一根</el-button>
+                        <el-button size="small" type="danger" @click="removeCandle"
+                            :disabled="selectedIdx===null"><el-icon>
+                                <minus />
+                            </el-icon> 删除选中</el-button>
                     </el-button-group>
                 </div>
             </div>
@@ -76,46 +87,49 @@
     </el-col>
 
     <el-col :span="8">
-        <el-card header="📚 形态模板库" style="height:100%; overflow-y:auto">
-            <el-collapse v-model="activeCollapse">
-                <el-collapse-item title="📈 看涨形态 (Bullish)" name="1">
-                    <div v-for="p in buyPatterns" :key="p.id" class="p-item" @click="loadP(p)">
-                        <span><el-tag size="small" type="danger">买</el-tag> <b>[[p.name]]</b></span>
-                        <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'PRESET')"><star-filled /></el-icon>
-                    </div>
-                </el-collapse-item>
-                <el-collapse-item title="📉 看跌形态 (Bearish)" name="2">
-                    <div v-for="p in sellPatterns" :key="p.id" class="p-item" @click="loadP(p)">
-                        <span><el-tag size="small" type="success">卖</el-tag> <b>[[p.name]]</b></span>
-                        <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'PRESET')"><star-filled /></el-icon>
-                    </div>
-                </el-collapse-item>
-                <el-collapse-item title="👤 我的模板" name="3">
-                    <div v-for="p in userPatterns" :key="p.id" class="p-item" @click="loadP(p)">
-                        <span><el-tag size="small" type="info">自</el-tag> [[p.name]]</span>
-                        <div>
-                            <el-icon class="fav-icon" :class="{active: p.is_fav}" @click.stop="toggleFav(p, 'USER')"><star-filled /></el-icon>
-                            <el-icon class="del-btn" @click.stop="delPattern(p.id)"><delete /></el-icon>
-                        </div>
-                    </div>
-                </el-collapse-item>
-                <el-collapse-item title="⭐ 收藏模板" name="4">
-                    <div v-for="p in favPatterns" :key="p.id" class="p-item" @click="loadP(p)">
-                        <span><el-tag size="small" type="warning">⭐</el-tag> [[p.name]]</span>
-                    </div>
-                </el-collapse-item>
-            </el-collapse>
+        <el-card shadow="hover" header="📚 形态模板库" style="height:100%; overflow-y:auto">
+            <div class="pattern-selector-grid">
+                <div class="pattern-btn type-buy" @click="openTemplateList('BUY')">
+                    <el-icon>
+                        <Top />
+                    </el-icon>
+                    <span>看涨形态 (Bullish)</span>
+                </div>
+                <div class="pattern-btn type-sell" @click="openTemplateList('SELL')">
+                    <el-icon>
+                        <Bottom />
+                    </el-icon>
+                    <span>看跌形态 (Bearish)</span>
+                </div>
+                <div class="pattern-btn type-user" @click="openTemplateList('USER')">
+                    <el-icon>
+                        <User />
+                    </el-icon>
+                    <span>我的模板</span>
+                </div>
+                <div class="pattern-btn type-fav" @click="openTemplateList('FAV')">
+                    <el-icon>
+                        <Star />
+                    </el-icon>
+                    <span>收藏模板</span>
+                </div>
+            </div>
+            <!-- Old collapse removed -->
         </el-card>
     </el-col>
 </el-row>
 
 <el-dialog v-model="saveDialog.visible" title="保存自定义形态" width="40%">
-    <div v-if="aiTrend" :class="aiTrend==='BUY'?'ai-box-buy':'ai-box-sell'" style="margin-bottom:15px; padding:10px; background:#f0f9eb; color:#67c23a">
-        <el-icon style="vertical-align:middle; margin-right:5px"><cpu /></el-icon>
+    <div v-if="aiTrend" :class="aiTrend==='BUY'?'ai-box-buy':'ai-box-sell'"
+        style="margin-bottom:15px; padding:10px; background:#f0f9eb; color:#67c23a">
+        <el-icon style="vertical-align:middle; margin-right:5px">
+            <cpu />
+        </el-icon>
         AI识别趋势：<b>[[aiTrend==='BUY'?'看涨':'看跌']]</b>
     </div>
 
-    <div class="verify-box" style="background: #fff7e6; border: 1px solid #ffe4bb; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+    <div class="verify-box"
+        style="background: #fff7e6; border: 1px solid #ffe4bb; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
         <div style="display:flex; justify-content:space-between; align-items:center">
             <span style="font-weight:bold; color:#606266">📊 历史回测验证</span>
             <el-button size="small" type="warning" plain @click="runVerify" :loading="verifying">
@@ -123,14 +137,21 @@
             </el-button>
         </div>
         <div v-if="verifyResult" style="margin-top:10px; display:flex; justify-content:space-around; font-size:13px">
-            <div style="text-align:center"><div style="color:#999">历史出现</div><b>[[verifyResult.count]]次</b></div>
-            <div style="text-align:center"><div style="color:#999">胜率</div><b style="color:#F56C6C">[[verifyResult.win_rate]]%</b></div>
-            <div style="text-align:center"><div style="color:#999">平均收益</div><b style="color:#F56C6C">[[verifyResult.avg_return]]%</b></div>
+            <div style="text-align:center">
+                <div style="color:#999">历史出现</div><b>[[verifyResult.count]]次</b>
+            </div>
+            <div style="text-align:center">
+                <div style="color:#999">胜率</div><b style="color:#F56C6C">[[verifyResult.win_rate]]%</b>
+            </div>
+            <div style="text-align:center">
+                <div style="color:#999">平均收益</div><b style="color:#F56C6C">[[verifyResult.avg_return]]%</b>
+            </div>
         </div>
     </div>
 
     <el-form label-position="top" style="margin-top:15px">
-        <el-form-item label="形态名称"><el-input v-model="saveDialog.name" placeholder="例如：我的低位螺旋桨"></el-input></el-form-item>
+        <el-form-item label="形态名称"><el-input v-model="saveDialog.name"
+                placeholder="例如：我的低位螺旋桨"></el-input></el-form-item>
         <el-form-item label="信号类型">
             <el-radio-group v-model="saveDialog.desc">
                 <el-radio label="BUY" border>📈 看涨</el-radio><el-radio label="SELL" border>📉 看跌</el-radio>
@@ -139,128 +160,299 @@
         <el-form-item><el-checkbox v-model="saveDialog.isFav" label="同时加入收藏" border></el-checkbox></el-form-item>
     </el-form>
     <template #footer><el-button type="primary" @click="doSave" style="width:100%">确认保存</el-button></template>
+
+</el-dialog>
+
+<!-- Template List Dialog -->
+<el-dialog v-model="templateDialog.visible" :title="templateDialog.title" width="30%">
+    <div style="max-height: 50vh; overflow-y: auto;">
+        <div v-for="p in currentList" :key="p.id" class="p-item" @click="loadP(p)">
+            <span v-if="templateDialog.type === 'BUY'"><el-tag size="small" type="danger">买</el-tag>
+                <b>[[p.name]]</b></span>
+            <span v-if="templateDialog.type === 'SELL'"><el-tag size="small" type="success">卖</el-tag>
+                <b>[[p.name]]</b></span>
+            <span v-if="templateDialog.type === 'USER'"><el-tag size="small" type="info">自</el-tag> [[p.name]]</span>
+            <span v-if="templateDialog.type === 'FAV'"><el-tag size="small" type="warning">⭐</el-tag> [[p.name]]</span>
+
+            <div>
+                <el-icon v-if="templateDialog.type !== 'FAV'" class="fav-icon" :class="{active: p.is_fav}"
+                    @click.stop="toggleFav(p, templateDialog.type === 'USER' ? 'USER' : 'PRESET')"><star-filled /></el-icon>
+                <el-icon v-if="templateDialog.type === 'USER'" class="del-btn" @click.stop="delPattern(p.id)">
+                    <delete />
+                </el-icon>
+            </div>
+        </div>
+        <div v-if="currentList.length === 0" style="text-align:center; padding:20px; color:#999">暂无数据</div>
+    </div>
 </el-dialog>
 {% endblock %}
 
 {% block scripts %}
 <style>
-    .tip-box { background:#e6f7ff; color:#1890ff; padding:8px 12px; font-size:12px; border-radius:4px; margin-bottom:10px; border:1px solid #91d5ff; }
-    .p-item { padding:10px; border-bottom:1px solid #f0f0f0; cursor:pointer; display:flex; align-items:center; justify-content:space-between; } .p-item:hover{background:#f9f9f9}
-    .fav-icon { color: #ddd; font-size: 16px; margin-left: 8px; } .fav-icon:hover { color: #f7ba2a; } .fav-icon.active { color: #E6A23C; }
-    .del-btn { color: #F56C6C; margin-left: 8px; font-size: 16px; }
+    .tip-box {
+        background: #e6f7ff;
+        color: #1890ff;
+        padding: 8px 12px;
+        font-size: 12px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        border: 1px solid #91d5ff;
+    }
+
+    .del-btn {
+        color: #F56C6C;
+        margin-left: 8px;
+        font-size: 16px;
+        opacity: 0.6;
+        transition: all 0.3s;
+    }
+
+    .del-btn:hover {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+
+    /* New Professional Styles */
+    .pattern-selector-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        padding: 20px;
+    }
+
+    .pattern-btn {
+        background: #fff;
+        border: 1px solid #e4e7ed;
+        border-radius: 8px;
+        height: 100px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .pattern-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px 0 rgba(0, 0, 0, 0.1);
+    }
+
+    .pattern-btn i {
+        font-size: 28px;
+        margin-bottom: 8px;
+    }
+
+    .pattern-btn span {
+        font-size: 14px;
+        font-weight: 500;
+        color: #606266;
+    }
+
+    .pattern-btn.type-buy {
+        border-bottom: 4px solid #F56C6C;
+    }
+
+    .pattern-btn.type-buy:hover {
+        border-color: #F56C6C;
+        background: #fef0f0;
+    }
+
+    .pattern-btn.type-buy i {
+        color: #F56C6C;
+    }
+
+    .pattern-btn.type-sell {
+        border-bottom: 4px solid #67C23A;
+    }
+
+    .pattern-btn.type-sell:hover {
+        border-color: #67C23A;
+        background: #f0f9eb;
+    }
+
+    .pattern-btn.type-sell i {
+        color: #67C23A;
+    }
+
+    .pattern-btn.type-user {
+        border-bottom: 4px solid #909399;
+    }
+
+    .pattern-btn.type-user:hover {
+        border-color: #909399;
+        background: #f4f4f5;
+    }
+
+    .pattern-btn.type-user i {
+        color: #909399;
+    }
+
+    .pattern-btn.type-fav {
+        border-bottom: 4px solid #E6A23C;
+    }
+
+    .pattern-btn.type-fav:hover {
+        border-color: #E6A23C;
+        background: #fdf6ec;
+    }
+
+    .pattern-btn.type-fav i {
+        color: #E6A23C;
+    }
+
+    .p-item {
+        padding: 12px 15px;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: background 0.2s;
+        border-radius: 4px;
+        margin-bottom: 5px;
+    }
+
+    .p-item:hover {
+        background: #ecf5ff;
+    }
 </style>
 <script>
-function pageSetup() {
-    const { ref, onMounted, computed } = Vue;
-    const mode = ref('mouse');
-    const activeCollapse = ref([]);
-    const list = ref({presets:[], users:[]});
+    function pageSetup() {
+        const { ref, onMounted, computed } = Vue;
+        const mode = ref('mouse');
+        const list = ref({ presets: [], users: [] });
 
-    const buyPatterns = computed(() => list.value.presets.filter(p => p.type === 'BUY'));
-    const sellPatterns = computed(() => list.value.presets.filter(p => p.type === 'SELL'));
-    const userPatterns = computed(() => list.value.users);
-    const favPatterns = computed(() => [...list.value.presets, ...list.value.users].filter(p => p.is_fav));
+        const buyPatterns = computed(() => list.value.presets.filter(p => p.type === 'BUY'));
+        const sellPatterns = computed(() => list.value.presets.filter(p => p.type === 'SELL'));
+        const userPatterns = computed(() => list.value.users);
+        const favPatterns = computed(() => [...list.value.presets, ...list.value.users].filter(p => p.is_fav));
 
-    const saveDialog = ref({visible:false, name:'', desc:'BUY', isFav: false});
-    const aiTrend = ref('');
-    const importText = ref('');
-    const verifying = ref(false);
-    const verifyResult = ref(null);
-
-    const klineData = ref([{open:30,close:50,low:20,high:60}, {open:55,close:40,low:30,high:65}]);
-    const selectedIdx = ref(null);
-    const curr = ref({open:0,close:0,low:0,high:0});
-    let drawPoints=[], isDrawing=false;
-    let chart1=null, chart2=null;
-
-    const init = () => {
-        chart1 = echarts.init(document.getElementById('draw-canvas'));
-        chart2 = echarts.init(document.getElementById('kline-editor'));
-
-        chart1.getZr().on('mousedown', ()=>{isDrawing=true;});
-        chart1.getZr().on('mousemove', e=>{ if(!isDrawing) return; const pt = chart1.convertFromPixel({seriesIndex:0}, [e.offsetX, e.offsetY]); if(pt) { drawPoints.push(pt[1]); renderDraw(); } });
-        chart1.getZr().on('mouseup', ()=>{isDrawing=false});
-
-        chart2.on('click', 'series.candlestick', p=>{ selectedIdx.value = p.dataIndex; curr.value = {...klineData.value[p.dataIndex]}; });
-
-        renderDraw(); renderKline(); loadList();
-    };
-
-    const renderDraw = () => { chart1.setOption({ xAxis:{show:false, data:drawPoints.map((_,i)=>i)}, yAxis:{min:0,max:100,show:false}, series:[{type:'line', data:drawPoints, showSymbol:false, smooth:0.3, lineStyle:{width:3, color:'#409EFF'}, areaStyle:{opacity:0.1}}] }); chart1.resize(); };
-
-    const renderKline = () => {
-        const d = klineData.value.map(k=>[k.open, k.close, k.low, k.high]);
-        chart2.setOption({
-            tooltip:{trigger:'axis'}, grid:{top:20,bottom:30,left:30,right:10},
-            xAxis:{data:klineData.value.map((_,i)=>i+1)}, yAxis:{scale:true, min:0, max:100},
-            dataZoom:[{type:'inside', start:0, end:100}],
-            series:[{ type:'candlestick', data:d, itemStyle:{color:'#ef232a', color0:'#14b143', borderColor:'#ef232a', borderColor0:'#14b143'}, select:{itemStyle:{borderColor:'#E6A23C', borderWidth:3}}, selectedMode:'single' }]
+        const templateDialog = ref({ visible: false, title: '', type: '' });
+        const currentList = computed(() => {
+            if (templateDialog.value.type === 'BUY') return buyPatterns.value;
+            if (templateDialog.value.type === 'SELL') return sellPatterns.value;
+            if (templateDialog.value.type === 'USER') return userPatterns.value;
+            if (templateDialog.value.type === 'FAV') return favPatterns.value;
+            return [];
         });
-        if(selectedIdx.value!==null) chart2.dispatchAction({type:'select', seriesIndex:0, dataIndex:selectedIdx.value});
-        chart2.resize();
-    };
 
-    const updateChart = () => { if(selectedIdx.value!==null) { klineData.value[selectedIdx.value] = {...curr.value}; renderKline(); } };
-    const clearDraw = () => { drawPoints=[]; renderDraw(); };
-    const addCandle = () => { klineData.value.push({open:50,close:50,high:60,low:40}); renderKline(); };
-    const removeCandle = () => { if(selectedIdx.value!==null) { klineData.value.splice(selectedIdx.value, 1); selectedIdx.value=null; renderKline(); } };
+        const openTemplateList = (type) => {
+            templateDialog.value.type = type;
+            templateDialog.value.visible = true;
+            if (type === 'BUY') templateDialog.value.title = '📈 看涨形态 (Bullish)';
+            else if (type === 'SELL') templateDialog.value.title = '📉 看跌形态 (Bearish)';
+            else if (type === 'USER') templateDialog.value.title = '👤 我的模板';
+            else templateDialog.value.title = '⭐ 收藏模板';
+        };
 
-    const loadList = async () => { try { const res = await axios.get('/api/pattern/list/'); list.value = res.data.data; } catch(e){} };
-    const loadP = (p) => { if (p.source_type === 'KLINE') { mode.value = 'kline'; klineData.value = p.data; setTimeout(renderKline, 100); } else { mode.value = 'mouse'; drawPoints = p.data; setTimeout(renderDraw, 100); } };
-    const toggleFav = async (p, type) => { await axios.post('/api/pattern/fav/toggle/', {id: p.id, source_type: type}); loadList(); ElementPlus.ElMessage.success('操作成功'); };
+        const saveDialog = ref({ visible: false, name: '', desc: 'BUY', isFav: false });
+        const aiTrend = ref('');
+        const importText = ref('');
+        const verifying = ref(false);
+        const verifyResult = ref(null);
 
-    const prepareSave = async () => {
-        const type = mode.value==='mouse'?'DRAW':'KLINE';
-        const data = type==='DRAW'?drawPoints:klineData.value;
-        try {
-            const res = await axios.post('/api/pattern/analyze/', {type, data});
-            aiTrend.value = res.data.data.trend;
-            saveDialog.value.desc = aiTrend.value==='SELL'?'SELL':'BUY';
-            saveDialog.value.visible = true;
-            verifyResult.value = null;
-        } catch(e) {}
-    };
+        const klineData = ref([{ open: 30, close: 50, low: 20, high: 60 }, { open: 55, close: 40, low: 30, high: 65 }]);
+        const selectedIdx = ref(null);
+        const curr = ref({ open: 0, close: 0, low: 0, high: 0 });
+        let drawPoints = [], isDrawing = false;
+        let chart1 = null, chart2 = null;
 
-    // 🔥 找回：运行验证
-    const runVerify = async () => {
-        verifying.value = true;
-        const type = mode.value==='mouse'?'DRAW':'KLINE';
-        const data = type==='DRAW'?drawPoints:klineData.value;
-        try {
-            const res = await axios.post('/api/pattern/verify/', { type, data });
-            verifyResult.value = res.data.data;
-            ElementPlus.ElMessage.success('验证完成');
-        } finally { verifying.value = false; }
-    };
+        const init = () => {
+            chart1 = echarts.init(document.getElementById('draw-canvas'));
+            chart2 = echarts.init(document.getElementById('kline-editor'));
 
-    const doSave = async () => {
-        if(!saveDialog.value.name) return ElementPlus.ElMessage.warning('请输入名称');
-        const type = mode.value==='mouse'?'DRAW':'KLINE';
-        const data = mode.value==='mouse'?drawPoints:klineData.value;
-        await axios.post('/api/pattern/save/', { name: saveDialog.value.name, desc: saveDialog.value.desc, type: type, data: data });
-        if (saveDialog.value.isFav) ElementPlus.ElMessage.success('保存成功并收藏');
-        else ElementPlus.ElMessage.success('保存成功');
-        saveDialog.value.visible = false; loadList();
-    };
+            chart1.getZr().on('mousedown', () => { isDrawing = true; });
+            chart1.getZr().on('mousemove', e => { if (!isDrawing) return; const pt = chart1.convertFromPixel({ seriesIndex: 0 }, [e.offsetX, e.offsetY]); if (pt) { drawPoints.push(pt[1]); renderDraw(); } });
+            chart1.getZr().on('mouseup', () => { isDrawing = false });
 
-    const delPattern = async (id) => { await axios.post('/api/pattern/delete/', {id}); loadList(); };
-    const onModeChange = () => { setTimeout(() => { if(mode.value==='mouse') chart1.resize(); else chart2.resize(); }, 100); }
+            chart2.on('click', 'series.candlestick', p => { selectedIdx.value = p.dataIndex; curr.value = { ...klineData.value[p.dataIndex] }; });
 
-    // 🔥 找回：数据导入逻辑
-    const loadDemoData = () => { importText.value = `20 25 18 28\n26 24 22 30\n23 28 20 29`; };
-    const parseImportData = () => {
-        if (!importText.value.trim()) return;
-        const lines = importText.value.trim().split('\n');
-        const parsed = [];
-        for (let line of lines) {
-            const parts = line.replace(/[\t\s]+/g, ',').split(',').filter(x=>x);
-            if (parts.length >= 4) parsed.push({open:parseFloat(parts[0]), close:parseFloat(parts[1]), low:parseFloat(parts[2]), high:parseFloat(parts[3])});
-        }
-        if (parsed.length > 0) { klineData.value = parsed; mode.value = 'kline'; setTimeout(renderKline, 100); ElementPlus.ElMessage.success('导入成功'); }
-    };
+            renderDraw(); renderKline(); loadList();
+        };
 
-    onMounted(()=>setTimeout(init, 200));
-    return { mode, activeCollapse, list, buyPatterns, sellPatterns, userPatterns, favPatterns, klineData, selectedIdx, curr, saveDialog, aiTrend, updateChart, clearDraw, addCandle, removeCandle, loadP, prepareSave, doSave, delPattern, toggleFav, onModeChange, importText, loadDemoData, parseImportData, runVerify, verifying, verifyResult };
-}
+        const renderDraw = () => { chart1.setOption({ xAxis: { show: false, data: drawPoints.map((_, i) => i) }, yAxis: { min: 0, max: 100, show: false }, series: [{ type: 'line', data: drawPoints, showSymbol: false, smooth: 0.3, lineStyle: { width: 3, color: '#409EFF' }, areaStyle: { opacity: 0.1 } }] }); chart1.resize(); };
+
+        const renderKline = () => {
+            const d = klineData.value.map(k => [k.open, k.close, k.low, k.high]);
+            chart2.setOption({
+                tooltip: { trigger: 'axis' }, grid: { top: 20, bottom: 30, left: 30, right: 10 },
+                xAxis: { data: klineData.value.map((_, i) => i + 1) }, yAxis: { scale: true, min: 0, max: 100 },
+                dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+                series: [{ type: 'candlestick', data: d, itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' }, select: { itemStyle: { borderColor: '#E6A23C', borderWidth: 3 } }, selectedMode: 'single' }]
+            });
+            if (selectedIdx.value !== null) chart2.dispatchAction({ type: 'select', seriesIndex: 0, dataIndex: selectedIdx.value });
+            chart2.resize();
+        };
+
+        const updateChart = () => { if (selectedIdx.value !== null) { klineData.value[selectedIdx.value] = { ...curr.value }; renderKline(); } };
+        const clearDraw = () => { drawPoints = []; renderDraw(); };
+        const addCandle = () => { klineData.value.push({ open: 50, close: 50, high: 60, low: 40 }); renderKline(); };
+        const removeCandle = () => { if (selectedIdx.value !== null) { klineData.value.splice(selectedIdx.value, 1); selectedIdx.value = null; renderKline(); } };
+
+        const loadList = async () => { try { const res = await axios.get('/api/pattern/list/'); list.value = res.data.data; } catch (e) { } };
+        const loadP = (p) => {
+            if (p.source_type === 'KLINE') { mode.value = 'kline'; klineData.value = p.data; setTimeout(renderKline, 100); }
+            else { mode.value = 'mouse'; drawPoints = p.data; setTimeout(renderDraw, 100); }
+            templateDialog.value.visible = false; // Close dialog on select
+        };
+        const toggleFav = async (p, type) => { await axios.post('/api/pattern/fav/toggle/', { id: p.id, source_type: type }); loadList(); ElementPlus.ElMessage.success('操作成功'); };
+
+        const prepareSave = async () => {
+            const type = mode.value === 'mouse' ? 'DRAW' : 'KLINE';
+            const data = type === 'DRAW' ? drawPoints : klineData.value;
+            try {
+                const res = await axios.post('/api/pattern/analyze/', { type, data });
+                aiTrend.value = res.data.data.trend;
+                saveDialog.value.desc = aiTrend.value === 'SELL' ? 'SELL' : 'BUY';
+                saveDialog.value.visible = true;
+                verifyResult.value = null;
+            } catch (e) { }
+        };
+
+        // 🔥 找回：运行验证
+        const runVerify = async () => {
+            verifying.value = true;
+            const type = mode.value === 'mouse' ? 'DRAW' : 'KLINE';
+            const data = type === 'DRAW' ? drawPoints : klineData.value;
+            try {
+                const res = await axios.post('/api/pattern/verify/', { type, data });
+                verifyResult.value = res.data.data;
+                ElementPlus.ElMessage.success('验证完成');
+            } finally { verifying.value = false; }
+        };
+
+        const doSave = async () => {
+            if (!saveDialog.value.name) return ElementPlus.ElMessage.warning('请输入名称');
+            const type = mode.value === 'mouse' ? 'DRAW' : 'KLINE';
+            const data = mode.value === 'mouse' ? drawPoints : klineData.value;
+            await axios.post('/api/pattern/save/', { name: saveDialog.value.name, desc: saveDialog.value.desc, type: type, data: data });
+            if (saveDialog.value.isFav) ElementPlus.ElMessage.success('保存成功并收藏');
+            else ElementPlus.ElMessage.success('保存成功');
+            saveDialog.value.visible = false; loadList();
+        };
+
+        const delPattern = async (id) => { await axios.post('/api/pattern/delete/', { id }); loadList(); };
+        const onModeChange = () => { setTimeout(() => { if (mode.value === 'mouse') chart1.resize(); else chart2.resize(); }, 100); }
+
+        // 🔥 找回：数据导入逻辑
+        const loadDemoData = () => { importText.value = `20 25 18 28\n26 24 22 30\n23 28 20 29`; };
+        const parseImportData = () => {
+            if (!importText.value.trim()) return;
+            const lines = importText.value.trim().split('\n');
+            const parsed = [];
+            for (let line of lines) {
+                const parts = line.replace(/[\t\s]+/g, ',').split(',').filter(x => x);
+                if (parts.length >= 4) parsed.push({ open: parseFloat(parts[0]), close: parseFloat(parts[1]), low: parseFloat(parts[2]), high: parseFloat(parts[3]) });
+            }
+            if (parsed.length > 0) { klineData.value = parsed; mode.value = 'kline'; setTimeout(renderKline, 100); ElementPlus.ElMessage.success('导入成功'); }
+        };
+
+        onMounted(() => setTimeout(init, 200));
+        return { mode, list, buyPatterns, sellPatterns, userPatterns, favPatterns, klineData, selectedIdx, curr, saveDialog, aiTrend, updateChart, clearDraw, addCandle, removeCandle, loadP, prepareSave, doSave, delPattern, toggleFav, onModeChange, importText, loadDemoData, parseImportData, runVerify, verifying, verifyResult, templateDialog, currentList, openTemplateList };
+    }
 </script>
 {% endblock %}
