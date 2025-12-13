@@ -115,7 +115,59 @@ def analyze_kline_signals(df):
     return signals
 
 
-def run_analysis_core(target_pattern_data=None, filters=None):
+def check_logic_conditions(df, logic_list):
+    """
+    Evaluate advanced logic conditions.
+    logic_list: [{ 'logic': 'AND', 'field': 'MACD', 'op': 'gt', 'val': 0 }, ...]
+    """
+    if not logic_list: return True
+    
+    # 获取最新一行数据 (latest)
+    curr = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) > 1 else curr
+    
+    result = True
+    
+    for idx, item in enumerate(logic_list):
+        # 1. 获取左值 (Indicator Value)
+        field = item.get('field')
+        if not field: continue
+        
+        val_left = 0
+        if field in curr: val_left = curr[field]
+        elif field == 'close': val_left = curr['close']
+        
+        # 2. 获取右值 (Target Value)
+        val_right = float(item.get('val', 0))
+        
+        # 3. 计算单项结果
+        op = item.get('op')
+        term_res = False
+        
+        if op == 'gt': term_res = val_left > val_right
+        elif op == 'lt': term_res = val_left < val_right
+        elif op == 'gte': term_res = val_left >= val_right
+        elif op == 'lte': term_res = val_left <= val_right
+        elif op == 'eq': term_res = abs(val_left - val_right) < 0.01
+        elif op == 'cross_up': # 上穿：昨<阀 AND 今>阀
+             val_prev = prev[field] if field in prev else 0
+             term_res = val_prev < val_right and val_left > val_right
+        elif op == 'cross_down':
+             val_prev = prev[field] if field in prev else 0
+             term_res = val_prev > val_right and val_left < val_right
+
+        # 4. 逻辑组合 (AND / OR)
+        logic = item.get('logic', 'AND')
+        if idx == 0:
+            result = term_res
+        else:
+            if logic == 'AND': result = result and term_res
+            elif logic == 'OR': result = result or term_res
+            
+    return result
+
+
+def run_analysis_core(target_pattern_data=None, filters=None, pattern_name=None):
     target_series = []
     has_pattern = False
 
@@ -164,11 +216,18 @@ def run_analysis_core(target_pattern_data=None, filters=None):
                 match_data = seg.tolist()
 
         final = dtw_score if has_pattern else 60
+        final = dtw_score if has_pattern else 60
         if final < min_score: continue
+
+        # 🔥 新增：检查高级组合逻辑
+        if filters.get('logicConditions'):
+            if not check_logic_conditions(df, filters['logicConditions']):
+                continue
 
         results.append({
             'code': stock.ts_code, 'name': stock.name, 'price': round(curr['close'], 2),
-            'score': round(final, 1), 'confidence': 85, 'match_data': match_data, 'match_type': 'BUY'
+            'score': round(final, 1), 'confidence': 85, 'match_data': match_data, 'match_type': 'BUY',
+            'reason': pattern_name if has_pattern else '技术指标优选'
         })
 
     results.sort(key=lambda x: x['score'], reverse=True)

@@ -11,11 +11,12 @@
                     <search />
                 </el-icon> 去筛选新股
             </el-button>
+            <el-button size="small" @click="groupDialog=true">管理分组</el-button>
         </div>
     </template>
 
     <div v-if="favList.length > 0">
-        <el-table :data="favList" stripe style="width: 100%" border>
+        <el-table :data="favList" stripe style="width: 100%" height="calc(85vh - 120px)" border>
             <el-table-column prop="code" label="代码" width="120" sortable>
                 <template #default="scope">
                     <el-tag size="small" type="info">[[ scope.row.code ]]</el-tag>
@@ -42,11 +43,10 @@
                         </template>
                         <div style="display:flex; gap:5px">
                             <el-select v-model="scope.row.newGroup" placeholder="选择分组" size="small">
-                                <el-option label="默认" value="DEFAULT"></el-option>
-                                <el-option label="观察" value="WATCH"></el-option>
-                                <el-option label="龙头" value="TOP"></el-option>
+
+                                <el-option v-for="g in groups" :key="g" :label="g" :value="g"></el-option>
                             </el-select>
-                            <el-button size="small" type="primary" @click="updateGroup(scope.row)">确</el-button>
+                            <el-button size="small" type="primary" @click="updateGroup(scope.row)">确定</el-button>
                         </div>
                     </el-popover>
                 </template>
@@ -81,6 +81,42 @@
     </div>
     <div id="kline-chart" style="height:500px"></div>
 </el-dialog>
+
+<el-dialog v-model="groupDialog" title="分组管理" width="400px">
+    <div style="display:flex; gap:10px; margin-bottom:20px">
+        <el-input v-model="newGroupName" placeholder="输入新分组名称"></el-input>
+        <el-button type="primary" @click="createGroup">新建</el-button>
+    </div>
+    <el-table :data="groups.map(g=>{return {name:g}})" border height="300px">
+        <el-table-column prop="name" label="分组名称"></el-table-column>
+        <el-table-column label="操作" width="200" align="center">
+            <template #default="scope">
+                <div v-if="['默认','观察','龙头'].includes(scope.row.name)">
+                    <el-tag type="info" size="small" effect="plain">系统预设</el-tag>
+                </div>
+                <div v-else>
+                    <el-button type="primary" link @click="startRename(scope.row)">
+                        <el-icon>
+                            <Edit />
+                        </el-icon> 重命名
+                    </el-button>
+                    <el-button type="danger" link @click="deleteGroup(scope.row.name)">
+                        <el-icon>
+                            <Delete />
+                        </el-icon> 删除
+                    </el-button>
+                </div>
+            </template>
+        </el-table-column>
+    </el-table>
+</el-dialog>
+
+<el-dialog v-model="renameDialog.visible" title="重命名分组" width="300px">
+    <el-input v-model="renameDialog.newName" placeholder="新名称"></el-input>
+    <template #footer>
+        <el-button type="primary" @click="confirmRename">保存</el-button>
+    </template>
+</el-dialog>
 {% endblock %}
 
 {% block scripts %}
@@ -88,7 +124,11 @@
     function pageSetup() {
         const { ref, onMounted } = Vue;
         const favList = ref([]);
+        const groups = ref([]); // Dynamic groups
         const detailVisible = ref(false);
+        const groupDialog = ref(false);
+        const renameDialog = ref({ visible: false, oldName: '', newName: '' });
+        const newGroupName = ref('');
         const currCode = ref('');
         const currIndicator = ref('MACD');
         let chart = null;
@@ -97,7 +137,40 @@
             try {
                 const res = await axios.get('/api/favorite/list/');
                 favList.value = res.data.data.map(item => ({ ...item, newGroup: item.group }));
+                groups.value = res.data.groups || [];
             } catch (e) { ElementPlus.ElMessage.error('加载失败'); }
+        };
+
+        const createGroup = async () => {
+            if (!newGroupName.value) return;
+            await axios.post('/api/favorite/group/add/', { name: newGroupName.value });
+            newGroupName.value = '';
+            loadList();
+            ElementPlus.ElMessage.success('创建成功');
+        };
+
+        const deleteGroup = async (name) => {
+            try {
+                await axios.post('/api/favorite/group/delete/', { name: name });
+                loadList();
+                ElementPlus.ElMessage.success('删除成功');
+            } catch (e) { ElementPlus.ElMessage.error('删除失败'); }
+        };
+
+        const startRename = (row) => {
+            renameDialog.value.oldName = row.name;
+            renameDialog.value.newName = row.name;
+            renameDialog.value.visible = true;
+        };
+
+        const confirmRename = async () => {
+            if (!renameDialog.value.newName || renameDialog.value.newName === renameDialog.value.oldName) return;
+            try {
+                await axios.post('/api/favorite/group/rename/', { old_name: renameDialog.value.oldName, new_name: renameDialog.value.newName });
+                renameDialog.value.visible = false;
+                loadList();
+                ElementPlus.ElMessage.success('重命名成功');
+            } catch (e) { ElementPlus.ElMessage.error('重命名失败，可能名称已存在'); }
         };
 
         // 🔥 新增：更新分组
@@ -153,7 +226,7 @@
         };
 
         onMounted(loadList);
-        return { favList, detailVisible, goScan, toPredict, removeFav, showDetail, renderChart, currIndicator, updateGroup };
+        return { favList, detailVisible, goScan, toPredict, removeFav, showDetail, renderChart, currIndicator, updateGroup, groupDialog, groups, newGroupName, createGroup, deleteGroup, renameDialog, startRename, confirmRename };
     }
 </script>
 {% endblock %}

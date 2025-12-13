@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import StockDaily, StockBasic, UserPattern, FavoriteStock, TradeRecord, SystemMessage, PatternFavorite, \
-    UserStrategy
+    UserStrategy, StockGroup
 from algorithms.matcher import run_analysis_core, PRESET_PATTERNS, analyze_kline_signals, calculate_indicators
 from algorithms.predictor import run_lstm_prediction
 from algorithms.backtest import run_backtest_strategy
@@ -396,7 +396,57 @@ def api_run_analysis(request):
             return JsonResponse({'code': 500})
     return JsonResponse({'code': 405})
 
+@csrf_exempt
+def api_profit_breakdown(request):
+    try:
+        from django.db.models import Sum, Count, F
+        
+        # 简单聚合：按代码分组统计
+        # 注意：这里假设 TradeRecord 有 pnl 字段记录了每笔交易的盈亏
+        # 如果没有 pnl 数据，需要根据买卖记录实时计算 (复杂)，这里先假设 pnl 字段有值
+        # 若 pnl 为空，暂且用 simulation (price * volume * direction) 模拟
+        
+        # 真实场景应该配对买卖记录计算闭环盈亏。
+        # 这里为了演示，我们假设 'SELL' 记录的 (price * volume) - avg_cost 是盈亏
+        # 简化处理：返回 TradeRecord 中已有 pnl 的汇总
+        
+        # 1. 聚合
+        records = TradeRecord.objects.values('ts_code').annotate(
+            count=Count('id'),
+            total_pnl=Sum('pnl')
+        )
+        
+        data = []
+        for r in records:
+            name = r['ts_code']
+            try:
+                name = StockBasic.objects.get(ts_code=r['ts_code']).name
+            except:
+                pass
+            
+            # 手动计算胜率 (如果有 pnl 数据)
+            wins = TradeRecord.objects.filter(ts_code=r['ts_code'], pnl__gt=0).count()
+            data.append({
+                'code': r['ts_code'],
+                'name': name,
+                'count': r['count'],
+                'total_pnl': round(r['total_pnl'] or 0, 2),
+                'win_rate': round(wins / r['count'] * 100, 1) if r['count'] > 0 else 0
+            })
+            
+        return JsonResponse({'code': 200, 'data': data})
+    except Exception as e:
+        return JsonResponse({'code': 500, 'msg': str(e)})
 
+
+@csrf_exempt
+def api_stock_profit_detail(request):
+    try:
+        code = request.GET.get('code')
+        records = TradeRecord.objects.filter(ts_code=code).order_by('trade_date').values()
+        return JsonResponse({'code': 200, 'data': list(records)})
+    except Exception as e:
+        return JsonResponse({'code': 500, 'msg': str(e)})
 @csrf_exempt
 def api_stock_detail(request):
     """
@@ -517,14 +567,26 @@ def api_place_order(request):
     if request.method == 'POST':
         try:
             b = json.loads(request.body)
+            extra = {
+                'tab': b.get('tab', 'basic'),
+                'gridBase': b.get('gridBase'), 'gridUp': b.get('gridUp'), 'gridDown': b.get('gridDown'), 'gridVol': b.get('gridVol'),
+                'profitType': b.get('profitType'), 'profitVal': b.get('profitVal'),
+                'lossType': b.get('lossType'), 'lossVal': b.get('lossVal')
+            }
+            
+            # Determine status: if basic & immediate -> FILLED, else PENDING
+            status = 'FILLED' if (b.get('tab') == 'basic' and b.get('triggerValue') == 'IMMEDIATE') else 'PENDING'
+
             TradeRecord.objects.create(
                 ts_code=b['code'],
                 trade_date=datetime.date.today(),
                 trade_type=b['type'],
-                price=float(b['price']),
+                price=float(b['price']) if b.get('price') else 0,
                 volume=int(b['volume']),
                 trigger_condition=b.get('triggerValue', ''),
-                order_validity=b.get('valid', 'day')
+                order_validity=b.get('valid', 'day'),
+                status=status,
+                extra_params=extra
             )
             return JsonResponse({'code': 200})
         except Exception:
@@ -533,7 +595,13 @@ def api_place_order(request):
 
 
 def api_trade_data(request):
-    return JsonResponse({'code': 200, 'data': list(TradeRecord.objects.all().values())})
+    try:
+        data = list(TradeRecord.objects.all().values())
+        return JsonResponse({'code': 200, 'data': data})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'code': 500, 'msg': str(e)})
 
 
 # ==================== 6. 观察仓 API (含 Update) ====================
@@ -561,6 +629,28 @@ def api_fav_delete(request):
 
 
 @csrf_exempt
+def api_group_rename(request):
+    if request.method == 'POST':
+        try:
+            b = json.loads(request.body)
+            old_name = b.get('old_name')
+            new_name = b.get('new_name')
+            if not old_name or not new_name:
+                return JsonResponse({'code': 500, 'msg': '参数缺失'})
+            
+            # 1. Update Group Name
+            StockGroup.objects.filter(name=old_name).update(name=new_name)
+            
+            # 2. Update Favorites in that group
+            FavoriteStock.objects.filter(group=old_name).update(group=new_name)
+            
+            return JsonResponse({'code': 200})
+        except Exception as e:
+            return JsonResponse({'code': 500, 'msg': str(e)})
+    return JsonResponse({'code': 405})
+
+
+@csrf_exempt
 def api_fav_update(request):
     """
     更新观察仓分组
@@ -584,7 +674,50 @@ def api_fav_list(request):
         except:
             name = f.ts_code
         data.append({'code': f.ts_code, 'name': name, 'group': f.group})
-    return JsonResponse({'code': 200, 'data': data})
+    
+    # 获取所有分组
+    try:
+        db_groups = list(StockGroup.objects.values_list('name', flat=True))
+    except Exception:
+        db_groups = []
+        
+    # Ensure defaults are always present and unique
+    defaults = ['默认', '观察', '龙头']
+    groups = sorted(list(set(defaults + db_groups)))
+    # Move defaults to front
+    for d in reversed(defaults):
+        if d in groups:
+            groups.remove(d)
+            groups.insert(0, d)
+        
+    return JsonResponse({'code': 200, 'data': data, 'groups': groups})
+
+
+@csrf_exempt
+def api_group_add(request):
+    if request.method == 'POST':
+        try:
+            name = json.loads(request.body).get('name')
+            if name:
+                StockGroup.objects.get_or_create(name=name)
+            return JsonResponse({'code': 200})
+        except Exception as e:
+            return JsonResponse({'code': 500, 'msg': str(e)})
+    return JsonResponse({'code': 405})
+
+
+@csrf_exempt
+def api_group_delete(request):
+    if request.method == 'POST':
+        try:
+            name = json.loads(request.body).get('name')
+            StockGroup.objects.filter(name=name).delete()
+            # Optional: Move stocks in this group to Default?
+            FavoriteStock.objects.filter(group=name).update(group='默认')
+            return JsonResponse({'code': 200})
+        except Exception:
+            return JsonResponse({'code': 500})
+    return JsonResponse({'code': 405})
 
 
 # ==================== 7. AI 预测与回测 ====================
@@ -611,29 +744,7 @@ def api_run_prediction(request):
             return JsonResponse({'code': 500, 'msg': str(e)})
     return JsonResponse({'code': 405})
 
-@csrf_exempt
-def api_place_order(request):
-    """
-    提交订单接口：写入 TradeRecord 表
-    """
-    if request.method == 'POST':
-        try:
-            b = json.loads(request.body)
-            TradeRecord.objects.create(
-                ts_code=b['code'],
-                trade_date=datetime.date.today(),
-                trade_type=b['type'],
-                price=float(b['price']),
-                volume=int(b['volume']),
-                # 记录策略名或触发条件
-                strategy_name='决策中心手动',
-                trigger_condition=b.get('triggerValue', ''),
-                order_validity=b.get('valid', 'day')
-            )
-            return JsonResponse({'code': 200, 'msg': '下单成功'})
-        except Exception as e:
-            return JsonResponse({'code': 500, 'msg': str(e)})
-    return JsonResponse({'code': 405})
+
 @csrf_exempt
 def api_run_backtest(request):
     return JsonResponse({'code': 200, 'data': run_backtest_strategy(json.loads(request.body).get('code'))})

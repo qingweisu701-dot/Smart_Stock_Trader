@@ -19,6 +19,8 @@ urlpatterns = [
     path('analysis/scan/', views.page_analysis_scan, name='page_analysis_scan'),
     path('analysis/profit/', views.page_profit_analysis, name='page_profit_analysis'),
     path('analysis/run/', views.api_run_analysis, name='api_run_analysis'),
+    path('analysis/profit/breakdown/', views.api_profit_breakdown, name='api_profit_breakdown'),
+    path('analysis/profit/detail/', views.api_stock_profit_detail, name='api_stock_profit_detail'), 
     path('analysis/fav/', views.page_analysis_fav, name='page_analysis_fav'),
 
     # 3. 策略管理
@@ -41,6 +43,9 @@ urlpatterns = [
     path('favorite/add/', views.api_fav_add, name='api_fav_add'),
     path('favorite/delete/', views.api_fav_delete, name='api_fav_delete'),
     path('favorite/update/', views.api_fav_update, name='api_fav_update'),  # 🔥 新增
+    path('favorite/group/add/', views.api_group_add, name='api_group_add'),
+    path('favorite/group/rename/', views.api_group_rename, name='api_group_rename'),
+    path('favorite/group/delete/', views.api_group_delete, name='api_group_delete'),
     path('favorite/list/', views.api_fav_list, name='api_fav_list'),
 
     path('message/check/', views.api_check_messages, name='api_check_messages'),

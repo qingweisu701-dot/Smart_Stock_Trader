@@ -326,8 +326,14 @@
         const mode = ref('mouse');
         const list = ref({ presets: [], users: [] });
 
-        const buyPatterns = computed(() => list.value.presets.filter(p => p.type === 'BUY'));
-        const sellPatterns = computed(() => list.value.presets.filter(p => p.type === 'SELL'));
+        const buyPatterns = computed(() => [
+            ...list.value.presets.filter(p => p.type === 'BUY'),
+            ...list.value.users.filter(p => p.type === 'BUY')
+        ]);
+        const sellPatterns = computed(() => [
+            ...list.value.presets.filter(p => p.type === 'SELL'),
+            ...list.value.users.filter(p => p.type === 'SELL')
+        ]);
         const userPatterns = computed(() => list.value.users);
         const favPatterns = computed(() => [...list.value.presets, ...list.value.users].filter(p => p.is_fav));
 

@@ -3,30 +3,31 @@
 {% block content %}
 <el-card>
     <el-table :data="tableData" stripe style="width: 100%">
-        <el-table-column prop="date" label="日期" width="120"></el-table-column>
-        <el-table-column prop="code" label="代码" width="100"></el-table-column>
-        <el-table-column prop="type" label="方向">
+        <el-table-column prop="trade_date" label="日期" width="120"></el-table-column>
+        <el-table-column prop="ts_code" label="代码" width="100"></el-table-column>
+        <el-table-column prop="trade_type" label="方向">
             <template #default="scope">
-                <el-tag :type="scope.row.type==='BUY'?'danger':'success'">[[scope.row.type==='BUY'?'买入':'卖出']]</el-tag>
+                <el-tag
+                    :type="scope.row.trade_type==='BUY'?'danger':'success'">[[scope.row.trade_type==='BUY'?'买入':'卖出']]</el-tag>
             </template>
         </el-table-column>
         <el-table-column prop="price" label="价格"></el-table-column>
         <el-table-column prop="volume" label="数量"></el-table-column>
-        <el-table-column prop="strategy" label="策略来源"></el-table-column>
+        <el-table-column prop="strategy_name" label="策略来源"></el-table-column>
     </el-table>
 </el-card>
 {% endblock %}
 
 {% block scripts %}
 <script>
-function pageSetup() {
-    const activeMenu = ref('4');
-    const tableData = ref([]);
-    onMounted(async () => {
-        const res = await axios.get('/api/trade/data/');
-        tableData.value = res.data.data;
-    });
-    return { activeMenu, tableData };
-}
+    function pageSetup() {
+        const activeMenu = ref('4');
+        const tableData = ref([]);
+        onMounted(async () => {
+            const res = await axios.get('/api/trade/data/');
+            tableData.value = res.data.data;
+        });
+        return { activeMenu, tableData };
+    }
 </script>
 {% endblock %}

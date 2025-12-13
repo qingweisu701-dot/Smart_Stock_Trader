@@ -11,7 +11,7 @@
                     <el-button type="primary" size="small" @click="initCharts">刷新数据</el-button>
                 </div>
             </template>
-            
+
             <el-row :gutter="20" style="margin-bottom: 20px;">
                 <el-col :span="6">
                     <div style="text-align:center; padding:10px; background:#f0f9eb; border-radius:4px">
@@ -43,41 +43,95 @@
         </el-card>
     </el-col>
 </el-row>
+
+<el-row :gutter="20" style="margin-top:20px">
+    <el-col :span="24">
+        <el-card>
+            <template #header>
+                <span>📊 个股收益明细</span>
+            </template>
+            <el-table :data="stockPnL" stripe border style="width: 100%" height="400">
+                <el-table-column prop="code" label="代码" width="120"></el-table-column>
+                <el-table-column prop="name" label="名称" width="150"></el-table-column>
+                <el-table-column prop="count" label="交易次数" width="120" sortable></el-table-column>
+                <el-table-column prop="win_rate" label="胜率" width="120" sortable>
+                    <template #default="scope">[[scope.row.win_rate]]%</template>
+                </el-table-column>
+                <el-table-column prop="total_pnl" label="累计盈亏" sortable>
+                    <template #default="scope">
+                        <span :style="{color: scope.row.total_pnl >= 0 ? '#F56C6C' : '#67C23A', fontWeight: 'bold'}">
+                            [[scope.row.total_pnl]]
+                        </span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作" width="120">
+                    <template #default="scope">
+                        <el-button size="small" type="primary" plain @click="openDetail(scope.row)">交易明细</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </el-card>
+    </el-col>
+</el-row>
+
+<el-dialog v-model="detailVisible" title="交易记录明细" width="60%">
+    <el-table :data="detailList" border height="400">
+        <el-table-column prop="trade_date" label="日期" width="120"></el-table-column>
+        <el-table-column prop="trade_type" label="方向" width="80">
+            <template #default="s">
+                <el-tag :type="s.row.trade_type==='BUY'?'danger':'success'">[[s.row.trade_type]]</el-tag>
+            </template>
+        </el-table-column>
+        <el-table-column prop="price" label="价格"></el-table-column>
+        <el-table-column prop="volume" label="数量"></el-table-column>
+        <el-table-column prop="pnl" label="单笔盈亏">
+            <template #default="s">
+                <span :class="s.row.pnl>0?'red':'green'" v-if="s.row.pnl!=null">[[s.row.pnl]]</span>
+                <span v-else>--</span>
+            </template>
+        </el-table-column>
+    </el-table>
+</el-dialog>
 {% endblock %}
 
 {% block scripts %}
 <script>
-function pageSetup() {
-    const { onMounted } = Vue;
-    
-    const initCharts = () => {
-        const chart = echarts.init(document.getElementById('pnl-chart'));
-        const dates = ['1月','2月','3月','4月','5月','6月'];
-        
-        chart.setOption({
-            title: { text: '资金权益曲线' },
-            tooltip: { trigger: 'axis' },
-            legend: { data: ['策略收益', '基准收益'] },
-            xAxis: { data: dates },
-            yAxis: { type: 'value' },
-            series: [
-                {
-                    name: '策略收益', type: 'line', smooth: true,
-                    data: [0, 5, 3, 8, 15, 12],
-                    itemStyle: { color: '#F56C6C' },
-                    areaStyle: { opacity: 0.1 }
-                },
-                {
-                    name: '基准收益', type: 'line', smooth: true,
-                    data: [0, 2, 1, 4, 3, 5],
-                    itemStyle: { color: '#909399' }
-                }
-            ]
-        });
-    };
+    function pageSetup() {
+        const { onMounted, ref } = Vue;
+        const stockPnL = ref([]);
+        const detailVisible = ref(false);
+        const detailList = ref([]);
 
-    onMounted(initCharts);
-    return { initCharts };
-}
+        const initCharts = async () => {
+            // Init chart (simulation)
+            const chart = echarts.init(document.getElementById('pnl-chart'));
+            const dates = ['1月', '2月', '3月', '4月', '5月', '6月'];
+            chart.setOption({
+                title: { text: '资金权益曲线' },
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['策略收益', '基准收益'] },
+                xAxis: { data: dates },
+                yAxis: { type: 'value' },
+                series: [{ name: '策略收益', type: 'line', smooth: true, data: [0, 5, 3, 8, 15, 12], itemStyle: { color: '#F56C6C' }, areaStyle: { opacity: 0.1 } }, { name: '基准收益', type: 'line', smooth: true, data: [0, 2, 1, 4, 3, 5], itemStyle: { color: '#909399' } }]
+            });
+
+            // Fetch Breakdown
+            try {
+                const res = await axios.get('/api/analysis/profit/breakdown/');
+                if (res.data.code === 200) {
+                    stockPnL.value = res.data.data;
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        const openDetail = async (row) => {
+            detailVisible.value = true;
+            const res = await axios.get(`/api/analysis/profit/detail/?code=${row.code}`);
+            detailList.value = res.data.data;
+        };
+
+        onMounted(initCharts);
+        return { initCharts, stockPnL, openDetail, detailVisible, detailList };
+    }
 </script>
 {% endblock %}

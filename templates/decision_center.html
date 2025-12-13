@@ -22,8 +22,10 @@
                 <span>🔥 机会池 (Smart Pool)</span>
                 <div style="display:flex; align-items:center; gap:10px">
                     <span style="font-size:12px">最低置信度:</span>
-                    <el-input-number v-model="filters.minScore" :min="0" :max="100" size="small"
-                        style="width:100px"></el-input-number>
+                    <el-input v-model="filters.minScore" type="number" :min="0" placeholder="60" size="small"
+                        style="width:100px" oninput="value=value.replace(/[^\d]/g,'')">
+                        <template #suffix>%</template>
+                    </el-input>
                     <el-select v-model="filters.patternId" placeholder="筛选形态" size="small" clearable
                         style="width:140px">
                         <el-option-group label="系统预设">
@@ -56,8 +58,9 @@
 
             <el-table-column label="触发信号" width="150">
                 <template #default="scope">
-                    <el-tag effect="dark" :type="scope.row.match_type==='BUY'?'danger':'success'">
-                        [[ scope.row.match_type==='BUY'?'机会':'风险' ]]
+                    <el-tag effect="light" :type="scope.row.match_type==='BUY'?'danger':'success'"
+                        style="font-weight:bold">
+                        [[ scope.row.reason || (scope.row.match_type==='BUY'?'综合机会':'风险预警') ]]
                     </el-tag>
                 </template>
             </el-table-column>
@@ -104,35 +107,120 @@
     <div id="decision-kline" style="height:500px"></div>
 </el-dialog>
 
-<el-dialog v-model="trade.visible" :title="trade.type === 'BUY' ? '🔴 买入委托' : '🟢 卖出委托'" width="30%">
-    <el-form label-position="top">
-        <el-alert title="交易将直接记录到交易流水中" type="info" :closable="false" style="margin-bottom:15px"></el-alert>
+<el-dialog v-model="trade.visible" :title="(trade.type === 'BUY' ? '🔴 买入委托' : '🟢 卖出委托') + ' - ' + trade.name"
+    width="40%">
+    <el-tabs v-model="trade.tab" type="card">
+        <!-- 1. 基础条件 -->
+        <el-tab-pane label="基础交易" name="basic">
+            <el-form label-position="top">
+                <el-row :gutter="20">
+                    <el-col :span="12">
+                        <el-form-item label="价格类型">
+                            <el-select v-model="trade.priceType" style="width:100%" @change="onPriceTypeChange">
+                                <el-option label="限价委托" value="LIMIT"></el-option>
+                                <el-option label="卖一价快速成交" value="ASK1"></el-option>
+                                <el-option label="最新价" value="LATEST"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                        <el-form-item label="委托价格">
+                            <el-input v-model="trade.price" type="number"
+                                :disabled="trade.priceType!=='LIMIT'"></el-input>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+                <el-form-item label="时间/价格触发 (选填)">
+                    <el-select v-model="trade.triggerValue" placeholder="立即成交 (默认)" style="width:100%" clearable>
+                        <el-option label="立即成交 (市价)" value="IMMEDIATE"></el-option>
+                        <el-option label="价格 >= 指标价" value="GE_PRICE"></el-option>
+                        <el-option label="价格 <= 指标价" value="LE_PRICE"></el-option>
+                        <el-option label="MA5 金叉 MA20" value="CROSS_UP_MA"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+        </el-tab-pane>
 
-        <el-form-item label="标的">
-            <el-tag size="large">[[ trade.name ]] ([[ trade.code ]])</el-tag>
-        </el-form-item>
+        <!-- 2. 网格交易 -->
+        <el-tab-pane label="网格策略" name="grid">
+            <el-alert title="在震荡区间内自动高抛低吸" type="success" :closable="false" style="margin-bottom:10px"></el-alert>
+            <el-form label-width="100px">
+                <el-form-item label="网格中枢价"><el-input v-model="trade.gridBase" type="number"
+                        placeholder="例如 10.00"></el-input></el-form-item>
+                <el-row :gutter="10">
+                    <el-col :span="12"><el-form-item label="上涨卖出%"><el-input v-model="trade.gridUp" type="number"
+                                placeholder="3.0"></el-input></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="下跌买入%"><el-input v-model="trade.gridDown" type="number"
+                                placeholder="3.0"></el-input></el-form-item></el-col>
+                </el-row>
+                <el-form-item label="单网格数量"><el-input v-model="trade.gridVol" type="number"
+                        step="100"></el-input></el-form-item>
+            </el-form>
+        </el-tab-pane>
 
+        <!-- 3. 高级风控 -->
+        <el-tab-pane label="高级风控" name="risk">
+            <el-form label-position="top">
+                <el-row :gutter="20">
+                    <el-col :span="12">
+                        <el-form-item label="止盈条件">
+                            <el-select v-model="trade.profitType" style="width:100%">
+                                <el-option label="不设置" value="NONE"></el-option>
+                                <el-option label="固定价格止盈" value="FIXED"></el-option>
+                                <el-option label="回撤止盈 (Trailing)" value="TRAILING"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                        <el-form-item label="止盈阈值">
+                            <el-input v-model="trade.profitVal" placeholder="例如: 22.5 或 5%"></el-input>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+                <el-row :gutter="20">
+                    <el-col :span="12">
+                        <el-form-item label="止损条件">
+                            <el-select v-model="trade.lossType" style="width:100%">
+                                <el-option label="不设置" value="NONE"></el-option>
+                                <el-option label="固定价格止损" value="FIXED"></el-option>
+                                <el-option label="百分比止损" value="PERCENT"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                        <el-form-item label="止损阈值">
+                            <el-input v-model="trade.lossVal" placeholder="例如: 18.0 或 -5%"></el-input>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+            </el-form>
+        </el-tab-pane>
+    </el-tabs>
+
+    <div style="margin-top:15px; border-top:1px solid #eee; padding-top:15px">
         <el-row :gutter="20">
-            <el-col :span="12">
-                <el-form-item label="委托价格">
-                    <el-input v-model="trade.price" type="number"></el-input>
-                </el-form-item>
+            <el-col :span="14">
+                <div style="font-size:12px;color:#666;margin-bottom:5px">委托数量 (股):</div>
+                <el-input v-model="trade.volume" type="number" step="100">
+                    <template #append>股</template>
+                </el-input>
+                <div style="margin-top:5px">
+                    <el-button size="small" @click="trade.volume=1000">10手</el-button>
+                    <el-button size="small" @click="trade.volume=trade.maxVol/2">1/2仓</el-button>
+                    <el-button size="small" @click="trade.volume=trade.maxVol">全仓</el-button>
+                </div>
             </el-col>
-            <el-col :span="12">
-                <el-form-item label="委托数量">
-                    <el-input v-model="trade.volume" type="number" step="100"></el-input>
-                </el-form-item>
+            <el-col :span="10" style="text-align:right; display:flex; flex-direction:column; justify-content:flex-end">
+                <div style="font-size:16px; font-weight:bold; color:#F56C6C">¥ [[ (trade.price *
+                    trade.volume).toFixed(2) ]]</div>
+                <div style="font-size:12px; color:#999">预估金额</div>
             </el-col>
         </el-row>
-
-        <el-form-item label="触发条件 (选填)">
-            <el-input v-model="trade.triggerValue" placeholder="例如：价格 >= 20.5"></el-input>
-        </el-form-item>
-    </el-form>
+    </div>
 
     <template #footer>
         <el-button @click="trade.visible=false">取消</el-button>
-        <el-button :type="trade.type === 'BUY' ? 'danger' : 'success'" @click="submitTrade">确认下单</el-button>
+        <el-button type="primary" @click="submitTrade">提交委托</el-button>
     </template>
 </el-dialog>
 {% endblock %}
@@ -151,7 +239,7 @@
         let chart = null;
 
         // 交易相关
-        const trade = ref({ visible: false, type: 'BUY', code: '', name: '', price: 0, volume: 100, triggerValue: '' });
+
 
         // 1. 加载机会池 (复用 Analysis 接口获取高质量形态)
         const filters = ref({ minScore: 70, patternId: '' });
@@ -170,16 +258,21 @@
             loading.value = true;
             try {
                 let pData = null;
+                let pName = '';
                 // 🔥 修复：根据选择的 patternId 查找对应的形态数据
                 if (filters.value.patternId) {
                     const [type, id] = filters.value.patternId.split(':');
                     const list = type === 'PRESET' ? presets.value.sys : presets.value.user;
                     const found = list.find(x => x.id == id); // 注意类型可能不一致，用==
-                    if (found) pData = found.data;
+                    if (found) {
+                        pData = found.data;
+                        pName = found.name;
+                    }
                 }
 
                 const res = await axios.post('/api/analysis/run/', {
                     pattern_data: pData,
+                    pattern_name: pName,
                     filters: filters.value
                 });
                 if (res.data.code === 200) {
@@ -232,7 +325,20 @@
             });
         };
 
-        // 3. 打开交易弹窗
+        // 交易相关
+        const trade = ref({
+            visible: false, type: 'BUY', code: '', name: '', price: 0, volume: 100,
+            triggerValue: 'IMMEDIATE', tab: 'basic', priceType: 'LIMIT', maxVol: 5000, // Simulated Max
+            gridBase: '', gridUp: 3.0, gridDown: 3.0, gridVol: 100,
+            profitType: 'NONE', profitVal: '', lossType: 'NONE', lossVal: ''
+        });
+
+        const onPriceTypeChange = () => {
+            // 模拟获取最新价
+            if (trade.value.priceType === 'LATEST') trade.value.price = 20.50; // Mock
+            else if (trade.value.priceType === 'ASK1') trade.value.price = 20.55;
+        };
+
         const openTrade = (row, type) => {
             trade.value.visible = true;
             trade.value.type = type;
@@ -240,7 +346,9 @@
             trade.value.name = row.name;
             trade.value.price = row.price;
             trade.value.volume = 100;
-            trade.value.triggerValue = '';
+            trade.value.triggerValue = 'IMMEDIATE';
+            trade.value.tab = 'basic'; // Reset to basic tab
+            trade.value.gridBase = row.price;
         };
 
         // 4. 提交交易
@@ -261,7 +369,7 @@
             loadOpportunities();
         });
 
-        return { loading, opportunities, detailVisible, currCode, currIndicator, trade, loadOpportunities, showDetail, renderChart, openTrade, submitTrade, goHistory, filters, presets };
+        return { loading, opportunities, detailVisible, currCode, currIndicator, trade, loadOpportunities, showDetail, renderChart, openTrade, submitTrade, goHistory, filters, presets, onPriceTypeChange };
     }
 </script>
 {% endblock %}

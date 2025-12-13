@@ -54,10 +54,18 @@ class PatternFavorite(models.Model):
         constraints = [models.UniqueConstraint(fields=['pattern_id', 'pattern_type'], name='unique_fav_pattern')]
 
 
+class StockGroup(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name='分组名称')
+    create_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['create_time']
+
+
 class FavoriteStock(models.Model):
-    GROUPS = (('DEFAULT', '默认'), ('WATCH', '观察'), ('TOP', '龙头'))
+    # GROUPS = (('DEFAULT', '默认'), ('WATCH', '观察'), ('TOP', '龙头'))
     ts_code = models.CharField(max_length=20)
-    group = models.CharField(max_length=20, choices=GROUPS, default='DEFAULT')
+    group = models.CharField(max_length=50, default='默认')
     add_time = models.DateTimeField(auto_now_add=True)
     notes = models.CharField(max_length=100, blank=True)
 
@@ -79,6 +87,10 @@ class TradeRecord(models.Model):
     # 🔥 条件单增强字段
     trigger_condition = models.CharField(max_length=100, blank=True, verbose_name='触发条件')
     order_validity = models.CharField(max_length=20, default='day', verbose_name='有效期')
+    
+    # NEW: 状态与高级参数
+    status = models.CharField(max_length=20, default='FILLED', verbose_name='状态') # PENDING, FILLED, CANCELED
+    extra_params = models.JSONField(verbose_name='高级参数', default=dict, blank=True) # 存网格、止损等
 
     pnl = models.FloatField(null=True, blank=True, verbose_name='盈亏')
     create_time = models.DateTimeField(auto_now_add=True)

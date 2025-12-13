@@ -27,6 +27,13 @@
                 </el-form-item>
             </el-card>
             <el-card shadow="hover" class="filter-card">
+                <div slot="header" class="card-header">🧠 高级逻辑</div>
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <span style="font-size:12px; color:#666">已设 [[filters.logicConditions.length]] 条规则</span>
+                    <el-button type="primary" link @click="logicDialog=true">编辑组合</el-button>
+                </div>
+            </el-card>
+            <el-card shadow="hover" class="filter-card">
                 <div slot="header" class="card-header">⚡ 监控条件</div>
                 <el-form-item label="网格触发"><el-checkbox-group v-model="filters.gridConditions"><el-checkbox
                             label="grid_buy">网格买入</el-checkbox></el-checkbox-group></el-form-item>
@@ -107,6 +114,60 @@
     </el-form>
     <template #footer><el-button type="primary" @click="doSaveStrategy">保存策略</el-button></template>
 </el-dialog>
+
+<!-- Logic Builder Dialog -->
+<el-dialog v-model="logicDialog" title="高级逻辑组合构建器" width="50%">
+    <el-alert title="定义多维度的指标逻辑组合 (支持 AND/OR)" type="info" :closable="false" style="margin-bottom:15px"></el-alert>
+
+    <div style="margin-bottom:15px; max-height:400px; overflow-y:auto">
+        <div v-for="(item, idx) in filters.logicConditions" :key="idx"
+            style="display:flex; gap:10px; margin-bottom:10px; align-items:center">
+            <!-- Logic -->
+            <el-select v-if="idx > 0" v-model="item.logic" style="width:100px">
+                <el-option label="且 (AND)" value="AND"></el-option>
+                <el-option label="或 (OR)" value="OR"></el-option>
+            </el-select>
+            <el-tag v-else type="info" style="width:100px; text-align:center">起始条件</el-tag>
+
+            <!-- Field -->
+            <el-select v-model="item.field" placeholder="指标" style="width:120px">
+                <el-option label="MACD" value="MACD"></el-option>
+                <el-option label="RSI" value="RSI"></el-option>
+                <el-option label="KDJ_K" value="K"></el-option>
+                <el-option label="KDJ_J" value="J"></el-option>
+                <el-option label="收盘价" value="close"></el-option>
+                <el-option label="MA5" value="MA5"></el-option>
+            </el-select>
+
+            <!-- Operator -->
+            <el-select v-model="item.op" placeholder="判断" style="width:100px">
+                <el-option label="大于" value="gt"></el-option>
+                <el-option label="小于" value="lt"></el-option>
+                <el-option label="等于" value="eq"></el-option>
+                <el-option label="上穿" value="cross_up"></el-option>
+                <el-option label="下穿" value="cross_down"></el-option>
+            </el-select>
+
+            <!-- Value -->
+            <el-input v-model="item.val" placeholder="阈值" type="number" style="width:100px"></el-input>
+
+            <!-- Delete -->
+            <el-button type="danger" circle icon="Delete" size="small"
+                @click="filters.logicConditions.splice(idx,1)"></el-button>
+        </div>
+        <div v-if="filters.logicConditions.length===0"
+            style="text-align:center; padding:20px; color:#999; border:1px dashed #eee; border-radius:4px"
+            @click="addLogicItem">
+            点击下方按钮添加第一个筛选条件
+        </div>
+    </div>
+
+    <el-button type="primary" plain icon="Plus" style="width:100%" @click="addLogicItem">添加条件</el-button>
+
+    <template #footer>
+        <el-button @click="logicDialog = false">完成配置</el-button>
+    </template>
+</el-dialog>
 {% endblock %}
 
 {% block scripts %}
@@ -120,12 +181,13 @@
         const { ref, onMounted } = Vue;
         const loading = ref(false);
         const activeNames = ref(['1', '2', '3']);
-        const filters = ref({ patternId: '', minScore: 60, marketCap: '', strategies: [], priceBreak: '', priceFall: '', dailyChange: [-5, 5], gridConditions: [] });
+        const filters = ref({ patternId: '', minScore: 60, marketCap: '', strategies: [], priceBreak: '', priceFall: '', dailyChange: [-5, 5], gridConditions: [], logicConditions: [] });
         const presets = ref({ sys: [], user: [] });
         const results = ref([]);
         const detailVisible = ref(false);
         const trade = ref({ visible: false, code: '', name: '', type: 'BUY', price: 0, volume: 100, triggerValue: '' });
         const saveStrategyDialog = ref(false);
+        const logicDialog = ref(false); // New Dialog State
         const strategyName = ref('');
         const monitorEnabled = ref(false);
         const notifyMsg = ref(true);
@@ -133,6 +195,10 @@
         const currCode = ref('');
         const currIndicator = ref('MACD');
         let chart = null;
+
+        const addLogicItem = () => {
+            filters.value.logicConditions.push({ logic: 'AND', field: 'MACD', op: 'gt', val: 0 });
+        };
 
         const init = async () => {
             const res = await axios.get('/api/pattern/list/');
@@ -229,7 +295,7 @@
         const addFav = async (row) => { await axios.post('/api/favorite/add/', { code: row.code }); ElementPlus.ElMessage.success('已收藏'); };
 
         onMounted(init);
-        return { loading, activeNames, filters, presets, results, detailVisible, trade, saveStrategyDialog, strategyName, monitorEnabled, notifyMsg, notifyEmail, runScan, goProfitAnalysis, doSaveStrategy, showDetail, renderDetailChart, openTrade, submitTrade, addFav, currIndicator };
+        return { loading, activeNames, filters, presets, results, detailVisible, trade, saveStrategyDialog, strategyName, monitorEnabled, notifyMsg, notifyEmail, runScan, goProfitAnalysis, doSaveStrategy, showDetail, renderDetailChart, openTrade, submitTrade, addFav, currIndicator, logicDialog, addLogicItem };
     }
 </script>
 {% endblock %}
